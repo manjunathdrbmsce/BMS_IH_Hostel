@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "BMS Hostel",
+    "slug": "bms-hostel",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "bms-hostel",
+    "platforms": ["ios", "android"],
+    "newArchEnabled": true
+  }
+}

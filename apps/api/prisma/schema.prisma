@@ -1,0 +1,462 @@
+// =============================================================================
+// BMS Hostel Platform - Prisma Schema
+// Phase 1: Identity, RBAC, Audit
+// Phase 2: Hostel & Room Management
+// Phase 3: Buildings, Policies, Student Profiles, Allotments
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Users & Authentication
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String     @id @default(uuid()) @db.Uuid
+  email         String     @unique @db.VarChar(255)
+  mobile        String?    @unique @db.VarChar(20)
+  usn           String?    @unique @db.VarChar(50) // University Seat Number
+  passwordHash  String     @map("password_hash") @db.VarChar(255)
+  firstName     String     @map("first_name") @db.VarChar(100)
+  lastName      String     @map("last_name") @db.VarChar(100)
+  status        UserStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  userRoles     UserRole[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]     @relation("AuditUser")
+  beds          Bed[]          @relation("BedStudent")
+
+  // Phase 3 relations
+  studentProfile    StudentProfile?
+  guardianLinks     GuardianLink[]     @relation("GuardianUser")
+  wardGuardianLinks GuardianLink[]     @relation("WardUser")
+  bedAssignments    BedAssignment[]    @relation("AssignmentStudent")
+  assignedBy        BedAssignment[]    @relation("AssignmentAssignedBy")
+
+  @@index([email])
+  @@index([mobile])
+  @@index([usn])
+  @@index([status])
+  @@map("users")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+// ---------------------------------------------------------------------------
+// Roles & Permissions (RBAC)
+// ---------------------------------------------------------------------------
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(50)
+  displayName String   @map("display_name") @db.VarChar(100)
+  description String?  @db.VarChar(500)
+  isSystem    Boolean  @default(false) @map("is_system") // System roles cannot be deleted
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(100) // e.g., USER_CREATE
+  module      String   @db.VarChar(50)          // e.g., users, hostel, finance
+  description String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  rolePermissions RolePermission[]
+
+  @@index([module])
+  @@map("permissions")
+}
+
+model UserRole {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  roleId    String    @map("role_id") @db.Uuid
+  hostelId  String?   @map("hostel_id") @db.Uuid // Scoped role (null = global)
+  grantedAt DateTime  @default(now()) @map("granted_at")
+  grantedBy String?   @map("granted_by") @db.Uuid
+  revokedAt DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  hostel Hostel? @relation(fields: [hostelId], references: [id])
+
+  @@unique([userId, roleId, hostelId])
+  @@index([userId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  id           String   @id @default(uuid()) @db.Uuid
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// Refresh Tokens
+// ---------------------------------------------------------------------------
+
+model RefreshToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @map("token_hash") @db.VarChar(255)
+  deviceInfo  String?   @map("device_info") @db.VarChar(500)
+  ipAddress   String?   @map("ip_address") @db.VarChar(45)
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Audit Logs
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String   @db.VarChar(100) // e.g., LOGIN, USER_CREATE
+  resource   String   @db.VarChar(100) // e.g., auth, users
+  resourceId String?  @map("resource_id") @db.VarChar(255)
+  details    Json?    // Additional context
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  userAgent  String?  @map("user_agent") @db.VarChar(500)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation("AuditUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: Hostel Management
+// ---------------------------------------------------------------------------
+
+model Hostel {
+  id          String       @id @default(uuid()) @db.Uuid
+  code        String       @unique @db.VarChar(10)
+  name        String       @db.VarChar(200)
+  type        HostelType
+  address     String?      @db.VarChar(500)
+  totalBlocks Int          @default(1) @map("total_blocks")
+  contactNo   String?      @map("contact_no") @db.VarChar(20)
+  email       String?      @db.VarChar(255)
+  status      HostelStatus @default(ACTIVE)
+  capacity    Int          @default(0)
+  description String?      @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  rooms     Room[]
+  userRoles UserRole[]
+
+  // Phase 3: Building link
+  buildingId String?  @map("building_id") @db.Uuid
+  building   Building? @relation(fields: [buildingId], references: [id])
+
+  @@index([type])
+  @@index([status])
+  @@map("hostels")
+}
+
+enum HostelType {
+  BOYS
+  GIRLS
+  CO_ED
+}
+
+enum HostelStatus {
+  ACTIVE
+  INACTIVE
+  UNDER_MAINTENANCE
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: Room Management
+// ---------------------------------------------------------------------------
+
+model Room {
+  id        String     @id @default(uuid()) @db.Uuid
+  hostelId  String     @map("hostel_id") @db.Uuid
+  roomNo    String     @map("room_no") @db.VarChar(20)
+  floor     Int        @default(0)
+  block     String?    @db.VarChar(10) // Block A, B, C etc.
+  type      RoomType   @default(DOUBLE)
+  capacity  Int        @default(2)
+  status    RoomStatus @default(AVAILABLE)
+  amenities String[]   @default([])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  hostel Hostel @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+  beds   Bed[]
+
+  @@unique([hostelId, roomNo])
+  @@index([hostelId])
+  @@index([floor])
+  @@index([status])
+  @@index([type])
+  @@map("rooms")
+}
+
+enum RoomType {
+  SINGLE
+  DOUBLE
+  TRIPLE
+  QUAD
+  DORMITORY
+}
+
+enum RoomStatus {
+  AVAILABLE
+  FULL
+  UNDER_MAINTENANCE
+  CLOSED
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: Bed Management
+// ---------------------------------------------------------------------------
+
+model Bed {
+  id        String    @id @default(uuid()) @db.Uuid
+  roomId    String    @map("room_id") @db.Uuid
+  bedNo     String    @map("bed_no") @db.VarChar(10)
+  status    BedStatus @default(VACANT)
+  studentId String?   @map("student_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  room    Room  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  student User? @relation("BedStudent", fields: [studentId], references: [id])
+  assignments BedAssignment[]
+
+  @@unique([roomId, bedNo])
+  @@index([roomId])
+  @@index([studentId])
+  @@index([status])
+  @@map("beds")
+}
+
+enum BedStatus {
+  VACANT
+  OCCUPIED
+  RESERVED
+  UNDER_MAINTENANCE
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: Building Management
+// ---------------------------------------------------------------------------
+
+model Building {
+  id          String         @id @default(uuid()) @db.Uuid
+  code        String         @unique @db.VarChar(20)
+  name        String         @db.VarChar(200)
+  location    String?        @db.VarChar(500)   // City / campus area
+  address     String?        @db.VarChar(500)
+  contactNo   String?        @map("contact_no") @db.VarChar(20)
+  email       String?        @db.VarChar(255)
+  totalFloors Int            @default(1) @map("total_floors")
+  status      BuildingStatus @default(ACTIVE)
+  description String?        @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  hostels  Hostel[]
+  policies BuildingPolicy[]
+
+  @@index([status])
+  @@map("buildings")
+}
+
+enum BuildingStatus {
+  ACTIVE
+  INACTIVE
+  UNDER_CONSTRUCTION
+  UNDER_MAINTENANCE
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: Policy Engine
+// ---------------------------------------------------------------------------
+
+model BuildingPolicy {
+  id         String     @id @default(uuid()) @db.Uuid
+  buildingId String     @map("building_id") @db.Uuid
+  version    Int        @default(1)
+  isActive   Boolean    @default(true) @map("is_active")
+
+  // Curfew settings
+  weekdayCurfew  String   @default("22:00") @map("weekday_curfew") @db.VarChar(5) // HH:mm
+  weekendCurfew  String   @default("23:00") @map("weekend_curfew") @db.VarChar(5)
+  toleranceMin   Int      @default(15) @map("tolerance_min")
+
+  // Leave settings
+  parentApprovalRequired Boolean @default(true) @map("parent_approval_required")
+  maxLeaveDays           Int     @default(7) @map("max_leave_days")
+
+  // Escalation settings
+  wardenEscalationMin   Int @default(30) @map("warden_escalation_min")  // Minutes late before escalation
+  repeatedViolationThreshold Int @default(3) @map("repeated_violation_threshold")
+
+  // Notification settings
+  notifyParentOnExit    Boolean @default(true) @map("notify_parent_on_exit")
+  notifyParentOnEntry   Boolean @default(true) @map("notify_parent_on_entry")
+  notifyParentOnLate    Boolean @default(true) @map("notify_parent_on_late")
+  notifyWardenOnLate    Boolean @default(true) @map("notify_warden_on_late")
+
+  // Override notes
+  overrideNotes String? @map("override_notes") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by") @db.Uuid
+
+  // Relations
+  building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@unique([buildingId, version])
+  @@index([buildingId, isActive])
+  @@map("building_policies")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: Student Profile Extension
+// ---------------------------------------------------------------------------
+
+model StudentProfile {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  dateOfBirth DateTime? @map("date_of_birth") @db.Date
+  bloodGroup  String?   @map("blood_group") @db.VarChar(5)  // A+, B-, O+, etc.
+  gender      String?   @db.VarChar(10)
+  department  String?   @db.VarChar(100)
+  course      String?   @db.VarChar(100)
+  year        Int?      // Academic year 1,2,3,4
+  semester    Int?
+  admissionDate DateTime? @map("admission_date") @db.Date
+  emergencyContact String? @map("emergency_contact") @db.VarChar(20)
+  permanentAddress String? @map("permanent_address") @db.Text
+  medicalConditions String? @map("medical_conditions") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("student_profiles")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: Guardian / Parent Linkage
+// ---------------------------------------------------------------------------
+
+model GuardianLink {
+  id         String   @id @default(uuid()) @db.Uuid
+  studentId  String   @map("student_id") @db.Uuid   // The student (ward)
+  guardianId String   @map("guardian_id") @db.Uuid   // The parent/guardian user
+  relation   String   @db.VarChar(50)                // Father, Mother, Guardian, etc.
+  isPrimary  Boolean  @default(false) @map("is_primary")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  student  User @relation("WardUser", fields: [studentId], references: [id], onDelete: Cascade)
+  guardian User @relation("GuardianUser", fields: [guardianId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, guardianId])
+  @@index([studentId])
+  @@index([guardianId])
+  @@map("guardian_links")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3: Bed Assignment / Allotment History
+// ---------------------------------------------------------------------------
+
+model BedAssignment {
+  id         String           @id @default(uuid()) @db.Uuid
+  studentId  String           @map("student_id") @db.Uuid
+  bedId      String           @map("bed_id") @db.Uuid
+  status     AssignmentStatus @default(ACTIVE)
+
+  assignedAt  DateTime  @default(now()) @map("assigned_at")
+  vacatedAt   DateTime? @map("vacated_at")
+  assignedById String?  @map("assigned_by_id") @db.Uuid
+  reason      String?   @db.VarChar(500) // Reason for assignment/transfer/vacate
+  notes       String?   @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  student    User @relation("AssignmentStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  bed        Bed  @relation(fields: [bedId], references: [id], onDelete: Cascade)
+  assignedBy User? @relation("AssignmentAssignedBy", fields: [assignedById], references: [id])
+
+  @@index([studentId])
+  @@index([bedId])
+  @@index([status])
+  @@index([assignedAt])
+  @@map("bed_assignments")
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  VACATED
+  TRANSFERRED
+  EXPIRED
+}

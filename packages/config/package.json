@@ -1,0 +1,6 @@
+{
+  "name": "@bms/tsconfig",
+  "version": "0.0.0",
+  "private": true,
+  "files": ["base.json", "nestjs.json", "nextjs.json", "react-native.json"]
+}
