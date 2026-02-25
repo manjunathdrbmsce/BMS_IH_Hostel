@@ -3,6 +3,8 @@
 // Phase 1: Identity, RBAC, Audit
 // Phase 2: Hostel & Room Management
 // Phase 3: Buildings, Policies, Student Profiles, Allotments
+// Phase 4: Leave, Complaints, Notices, Gate Management
+// Phase 5: Violations, Policy Snapshots, Notifications
 // =============================================================================
 
 generator client {
@@ -43,6 +45,25 @@ model User {
   wardGuardianLinks GuardianLink[]     @relation("WardUser")
   bedAssignments    BedAssignment[]    @relation("AssignmentStudent")
   assignedBy        BedAssignment[]    @relation("AssignmentAssignedBy")
+
+  // Phase 4 relations
+  leaveRequests        LeaveRequest[]      @relation("LeaveStudent")
+  leaveWardenApprovals LeaveRequest[]      @relation("LeaveWarden")
+  leaveParentActions   LeaveRequest[]      @relation("LeaveParent")
+  complaints           Complaint[]         @relation("ComplaintStudent")
+  complaintsAssigned   Complaint[]         @relation("ComplaintAssignedTo")
+  complaintComments    ComplaintComment[]
+  noticesPublished     Notice[]            @relation("NoticePublisher")
+  noticeRecipients     NoticeRecipient[]
+  gateEntries          GateEntry[]         @relation("GateStudent")
+  gateScans            GateEntry[]         @relation("GateScanner")
+  gatePasses           GatePass[]          @relation("GatePassStudent")
+  gatePassApprovals    GatePass[]          @relation("GatePassApprover")
+
+  // Phase 5 relations
+  violations            Violation[]         @relation("ViolationStudent")
+  violationsResolved    Violation[]         @relation("ViolationResolver")
+  notificationsReceived Notification[]      @relation("NotificationRecipient")
 
   @@index([email])
   @@index([mobile])
@@ -198,6 +219,11 @@ model Hostel {
   buildingId String?  @map("building_id") @db.Uuid
   building   Building? @relation(fields: [buildingId], references: [id])
 
+  // Phase 4 relations
+  leaveRequests LeaveRequest[]
+  complaints    Complaint[]
+  notices       Notice[]      @relation("NoticeHostel")
+
   @@index([type])
   @@index([status])
   @@map("hostels")
@@ -315,6 +341,8 @@ model Building {
   // Relations
   hostels  Hostel[]
   policies BuildingPolicy[]
+  notices  Notice[]  @relation("NoticeBuilding")
+  policySnapshots PolicySnapshot[]
 
   @@index([status])
   @@map("buildings")
@@ -363,8 +391,12 @@ model BuildingPolicy {
   updatedAt DateTime @updatedAt @map("updated_at")
   createdBy String?  @map("created_by") @db.Uuid
 
+  // Violation window
+  violationWindow Int @default(30) @map("violation_window") // Rolling days for repeated count
+
   // Relations
   building Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  policySnapshots PolicySnapshot[]
 
   @@unique([buildingId, version])
   @@index([buildingId, isActive])
@@ -459,4 +491,397 @@ enum AssignmentStatus {
   VACATED
   TRANSFERRED
   EXPIRED
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: Leave Management
+// ---------------------------------------------------------------------------
+
+model LeaveRequest {
+  id        String       @id @default(uuid()) @db.Uuid
+  studentId String       @map("student_id") @db.Uuid
+  hostelId  String       @map("hostel_id") @db.Uuid
+  type      LeaveType
+  fromDate  DateTime     @map("from_date") @db.Date
+  toDate    DateTime     @map("to_date") @db.Date
+  reason    String       @db.Text
+  status    LeaveStatus  @default(PENDING)
+
+  parentApprovalAt  DateTime? @map("parent_approval_at")
+  wardenApprovalAt  DateTime? @map("warden_approval_at")
+  rejectedAt        DateTime? @map("rejected_at")
+  rejectionReason   String?   @map("rejection_reason") @db.Text
+  wardenId          String?   @map("warden_id") @db.Uuid
+  parentId          String?   @map("parent_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  student User   @relation("LeaveStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  hostel  Hostel @relation(fields: [hostelId], references: [id])
+  warden  User?  @relation("LeaveWarden", fields: [wardenId], references: [id])
+  parent  User?  @relation("LeaveParent", fields: [parentId], references: [id])
+  gateEntries GateEntry[] @relation("GateLeave")
+
+  @@index([studentId])
+  @@index([hostelId])
+  @@index([status])
+  @@index([fromDate, toDate])
+  @@map("leave_requests")
+}
+
+enum LeaveType {
+  HOME
+  MEDICAL
+  EMERGENCY
+  OTHER
+}
+
+enum LeaveStatus {
+  PENDING
+  PARENT_APPROVED
+  WARDEN_APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: Complaints
+// ---------------------------------------------------------------------------
+
+model Complaint {
+  id           String           @id @default(uuid()) @db.Uuid
+  studentId    String           @map("student_id") @db.Uuid
+  hostelId     String           @map("hostel_id") @db.Uuid
+  category     ComplaintCategory
+  subject      String           @db.VarChar(200)
+  description  String           @db.Text
+  priority     ComplaintPriority @default(MEDIUM)
+  status       ComplaintStatus   @default(OPEN)
+
+  assignedToId String?   @map("assigned_to_id") @db.Uuid
+  resolvedAt   DateTime? @map("resolved_at")
+  resolution   String?   @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  student    User              @relation("ComplaintStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  hostel     Hostel            @relation(fields: [hostelId], references: [id])
+  assignedTo User?             @relation("ComplaintAssignedTo", fields: [assignedToId], references: [id])
+  comments   ComplaintComment[]
+
+  @@index([studentId])
+  @@index([hostelId])
+  @@index([status])
+  @@index([category])
+  @@index([priority])
+  @@map("complaints")
+}
+
+model ComplaintComment {
+  id          String   @id @default(uuid()) @db.Uuid
+  complaintId String   @map("complaint_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  message     String   @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  complaint Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([complaintId])
+  @@map("complaint_comments")
+}
+
+enum ComplaintCategory {
+  MAINTENANCE
+  ELECTRICAL
+  PLUMBING
+  MESS
+  HYGIENE
+  SECURITY
+  OTHER
+}
+
+enum ComplaintPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ComplaintStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  REOPENED
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: Notices / Announcements
+// ---------------------------------------------------------------------------
+
+model Notice {
+  id              String        @id @default(uuid()) @db.Uuid
+  title           String        @db.VarChar(200)
+  body            String        @db.Text
+  priority        NoticePriority @default(INFO)
+  scope           NoticeScope    @default(ALL)
+  targetBuildingId String?      @map("target_building_id") @db.Uuid
+  targetHostelId   String?      @map("target_hostel_id") @db.Uuid
+  publishedById   String        @map("published_by_id") @db.Uuid
+  publishedAt     DateTime      @default(now()) @map("published_at")
+  expiresAt       DateTime?     @map("expires_at")
+  isActive        Boolean       @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  publishedBy    User              @relation("NoticePublisher", fields: [publishedById], references: [id])
+  targetBuilding Building?         @relation("NoticeBuilding", fields: [targetBuildingId], references: [id])
+  targetHostel   Hostel?           @relation("NoticeHostel", fields: [targetHostelId], references: [id])
+  recipients     NoticeRecipient[]
+
+  @@index([scope])
+  @@index([publishedAt])
+  @@index([isActive])
+  @@map("notices")
+}
+
+model NoticeRecipient {
+  id       String    @id @default(uuid()) @db.Uuid
+  noticeId String    @map("notice_id") @db.Uuid
+  userId   String    @map("user_id") @db.Uuid
+  readAt   DateTime? @map("read_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  notice Notice @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([noticeId, userId])
+  @@index([noticeId])
+  @@index([userId])
+  @@map("notice_recipients")
+}
+
+enum NoticePriority {
+  INFO
+  WARNING
+  URGENT
+}
+
+enum NoticeScope {
+  ALL
+  BUILDING
+  HOSTEL
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: Gate Management
+// ---------------------------------------------------------------------------
+
+model GateEntry {
+  id           String    @id @default(uuid()) @db.Uuid
+  studentId    String    @map("student_id") @db.Uuid
+  type         GateEntryType
+  gateNo       String    @map("gate_no") @db.VarChar(20)
+  scannedById  String?   @map("scanned_by_id") @db.Uuid
+  timestamp    DateTime  @default(now())
+  isLateEntry  Boolean   @default(false) @map("is_late_entry")
+  lateMinutes  Int?      @map("late_minutes")
+  linkedLeaveId String?  @map("linked_leave_id") @db.Uuid
+  notes        String?   @db.Text
+
+  // Phase 5: policy snapshot + violation links
+  policySnapshotId String? @map("policy_snapshot_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  student        User            @relation("GateStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  scannedBy      User?           @relation("GateScanner", fields: [scannedById], references: [id])
+  linkedLeave    LeaveRequest?   @relation("GateLeave", fields: [linkedLeaveId], references: [id])
+  policySnapshot PolicySnapshot? @relation(fields: [policySnapshotId], references: [id])
+  violations     Violation[]
+  notifications  Notification[]  @relation("EntryNotifications")
+
+  @@index([studentId])
+  @@index([timestamp])
+  @@index([isLateEntry])
+  @@index([type])
+  @@map("gate_entries")
+}
+
+model GatePass {
+  id           String        @id @default(uuid()) @db.Uuid
+  studentId    String        @map("student_id") @db.Uuid
+  purpose      String        @db.VarChar(500)
+  visitorName  String?       @map("visitor_name") @db.VarChar(200)
+  visitorPhone String?       @map("visitor_phone") @db.VarChar(20)
+  validFrom    DateTime      @map("valid_from")
+  validTo      DateTime      @map("valid_to")
+  status       GatePassStatus @default(ACTIVE)
+  approvedById String?       @map("approved_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  student    User  @relation("GatePassStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  approvedBy User? @relation("GatePassApprover", fields: [approvedById], references: [id])
+
+  @@index([studentId])
+  @@index([status])
+  @@index([validFrom, validTo])
+  @@map("gate_passes")
+}
+
+enum GateEntryType {
+  IN
+  OUT
+}
+
+enum GatePassStatus {
+  ACTIVE
+  USED
+  EXPIRED
+  CANCELLED
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: Policy Snapshots
+// ---------------------------------------------------------------------------
+
+model PolicySnapshot {
+  id                  String   @id @default(uuid()) @db.Uuid
+  buildingId          String   @map("building_id") @db.Uuid
+  policyId            String   @map("policy_id") @db.Uuid
+  policyVersion       Int      @map("policy_version")
+  curfewTimeUsed      String   @map("curfew_time_used") @db.VarChar(5)
+  toleranceMinUsed    Int      @map("tolerance_min_used")
+  leaveDeadlineUsed   DateTime? @map("leave_deadline_used")
+  escalationRuleMin   Int      @map("escalation_rule_min")
+  repeatedThreshold   Int      @map("repeated_threshold")
+  violationWindow     Int      @map("violation_window")
+  notifyParentOnExit  Boolean  @map("notify_parent_on_exit")
+  notifyParentOnEntry Boolean  @map("notify_parent_on_entry")
+  notifyParentOnLate  Boolean  @map("notify_parent_on_late")
+  notifyWardenOnLate  Boolean  @map("notify_warden_on_late")
+  snapshotData        Json?    @map("snapshot_data")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  building    Building       @relation(fields: [buildingId], references: [id])
+  policy      BuildingPolicy @relation(fields: [policyId], references: [id])
+  gateEntries GateEntry[]
+  violations  Violation[]
+
+  @@index([buildingId])
+  @@index([policyId])
+  @@map("policy_snapshots")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: Violations
+// ---------------------------------------------------------------------------
+
+model Violation {
+  id                      String            @id @default(uuid()) @db.Uuid
+  studentId               String            @map("student_id") @db.Uuid
+  gateEntryId             String            @map("gate_entry_id") @db.Uuid
+  policySnapshotId        String            @map("policy_snapshot_id") @db.Uuid
+  type                    ViolationType
+  requestedOrApprovedTime DateTime          @map("requested_or_approved_time")
+  actualTime              DateTime          @map("actual_time")
+  violatedByMinutes       Int               @map("violated_by_minutes")
+  reason                  String            @db.Text
+  repeatedCountSnapshot   Int               @map("repeated_count_snapshot")
+  escalationState         EscalationState   @default(NONE) @map("escalation_state")
+  notificationState       NotificationState @default(PENDING) @map("notification_state")
+  resolvedAt              DateTime?         @map("resolved_at")
+  resolvedById            String?           @map("resolved_by_id") @db.Uuid
+  resolvedNotes           String?           @map("resolved_notes") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  student        User           @relation("ViolationStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  gateEntry      GateEntry      @relation(fields: [gateEntryId], references: [id])
+  policySnapshot PolicySnapshot @relation(fields: [policySnapshotId], references: [id])
+  resolvedBy     User?          @relation("ViolationResolver", fields: [resolvedById], references: [id])
+  notifications  Notification[] @relation("ViolationNotifications")
+
+  @@index([studentId])
+  @@index([type])
+  @@index([escalationState])
+  @@index([createdAt])
+  @@map("violations")
+}
+
+enum ViolationType {
+  LATE_ENTRY
+  OVERSTAY
+  EARLY_EXIT
+}
+
+enum EscalationState {
+  NONE
+  WARNED
+  ESCALATED
+  RESOLVED
+}
+
+enum NotificationState {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: Notifications
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id          String              @id @default(uuid()) @db.Uuid
+  recipientId String              @map("recipient_id") @db.Uuid
+  channel     NotificationChannel @default(IN_APP)
+  title       String              @db.VarChar(200)
+  message     String              @db.Text
+  violationId String?             @map("violation_id") @db.Uuid
+  gateEntryId String?             @map("gate_entry_id") @db.Uuid
+  state       NotificationState   @default(PENDING)
+  readAt      DateTime?           @map("read_at")
+  sentAt      DateTime?           @map("sent_at")
+  failReason  String?             @map("fail_reason") @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  recipient User       @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  violation Violation?  @relation("ViolationNotifications", fields: [violationId], references: [id])
+  gateEntry GateEntry? @relation("EntryNotifications", fields: [gateEntryId], references: [id])
+
+  @@index([recipientId, readAt])
+  @@index([state])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  PUSH
 }

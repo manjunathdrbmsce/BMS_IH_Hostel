@@ -139,6 +139,12 @@ export class DashboardController {
         },
         buildings: await this.getBuildingStats(),
         allotments: await this.getAllotmentStats(),
+        leave: await this.getLeaveStats(),
+        complaints: await this.getComplaintStats(),
+        notices: await this.getNoticeStats(),
+        gate: await this.getGateStats(),
+        violations: await this.getViolationStats(),
+        notifications: await this.getNotificationStats(),
         activity: {
           todayLogins,
           weeklyLogins: recentLogins,
@@ -192,5 +198,72 @@ export class DashboardController {
       totalTransferred: transferred,
       studentProfiles,
     };
+  }
+
+  private async getLeaveStats() {
+    const [pending, approved, rejected] = await Promise.all([
+      this.prisma.leaveRequest.count({ where: { status: 'PENDING' } }),
+      this.prisma.leaveRequest.count({ where: { status: 'WARDEN_APPROVED' } }),
+      this.prisma.leaveRequest.count({ where: { status: 'REJECTED' } }),
+    ]);
+    return { pending, approved, rejected };
+  }
+
+  private async getComplaintStats() {
+    const [open, inProgress, resolved] = await Promise.all([
+      this.prisma.complaint.count({ where: { status: { in: ['OPEN', 'ASSIGNED', 'REOPENED'] } } }),
+      this.prisma.complaint.count({ where: { status: 'IN_PROGRESS' } }),
+      this.prisma.complaint.count({ where: { status: { in: ['RESOLVED', 'CLOSED'] } } }),
+    ]);
+    return { open, inProgress, resolved };
+  }
+
+  private async getNoticeStats() {
+    const [active, total] = await Promise.all([
+      this.prisma.notice.count({ where: { isActive: true } }),
+      this.prisma.notice.count(),
+    ]);
+    return { active, total };
+  }
+
+  private async getGateStats() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const [todayEntries, todayExits, todayLate] = await Promise.all([
+      this.prisma.gateEntry.count({ where: { type: 'IN', timestamp: { gte: today, lt: tomorrow } } }),
+      this.prisma.gateEntry.count({ where: { type: 'OUT', timestamp: { gte: today, lt: tomorrow } } }),
+      this.prisma.gateEntry.count({ where: { isLateEntry: true, timestamp: { gte: today, lt: tomorrow } } }),
+    ]);
+    return { todayEntries, todayExits, todayLate };
+  }
+
+  private async getViolationStats() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const [todayViolations, openEscalations, total] = await Promise.all([
+      this.prisma.violation.count({ where: { createdAt: { gte: today, lt: tomorrow } } }),
+      this.prisma.violation.count({ where: { escalationState: { in: ['WARNED', 'ESCALATED'] } } }),
+      this.prisma.violation.count(),
+    ]);
+    return { todayViolations, openEscalations, total };
+  }
+
+  private async getNotificationStats() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const [todaySent, total] = await Promise.all([
+      this.prisma.notification.count({ where: { createdAt: { gte: today, lt: tomorrow } } }),
+      this.prisma.notification.count(),
+    ]);
+    return { todaySent, total };
   }
 }

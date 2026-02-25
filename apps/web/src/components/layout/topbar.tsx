@@ -1,9 +1,11 @@
 'use client';
 
 import { useAuth } from '@/lib/auth';
+import { api } from '@/lib/api';
 import { Avatar } from '@/components/ui/avatar';
 import { Bell, Search, Menu } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 interface TopbarProps {
   title?: string;
@@ -11,8 +13,22 @@ interface TopbarProps {
 }
 
 export function Topbar({ title, subtitle }: TopbarProps) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!token) return;
+    const fetchCount = async () => {
+      try {
+        const res = await api.get<any>('/notifications/unread-count');
+        setUnreadCount(res.data?.count || 0);
+      } catch { /* ignore */ }
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 30000); // poll every 30s
+    return () => clearInterval(interval);
+  }, [token]);
 
   return (
     <header className="h-16 bg-white border-b border-gray-200 px-6 flex items-center justify-between shrink-0">
@@ -44,10 +60,14 @@ export function Topbar({ title, subtitle }: TopbarProps) {
         </div>
 
         {/* Notifications */}
-        <button className="relative p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition">
+        <Link href="/dashboard/notifications" className="relative p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition">
           <Bell className="w-5 h-5" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
-        </button>
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold text-white bg-red-500 rounded-full px-1">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </Link>
 
         {/* User */}
         {user && (

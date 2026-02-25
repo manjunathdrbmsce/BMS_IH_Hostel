@@ -3,7 +3,7 @@
 // Generates realistic data across all roles for manual testing
 // =============================================================================
 
-import { PrismaClient, UserStatus, BuildingStatus, BedStatus, AssignmentStatus, HostelStatus, RoomStatus, RoomType } from '@prisma/client';
+import { PrismaClient, UserStatus, BuildingStatus, BedStatus, AssignmentStatus, HostelStatus, RoomStatus, RoomType, LeaveType, LeaveStatus, ComplaintCategory, ComplaintPriority, ComplaintStatus, NoticePriority, NoticeScope, GateEntryType, GatePassStatus, ViolationType, EscalationState, NotificationState, NotificationChannel } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -1210,7 +1210,543 @@ async function main() {
   console.log(`   ✓ ${assignmentCount} bed assignments\n`);
 
   // =========================================================================
-  // 12. SUMMARY
+  // 12. LEAVE REQUESTS
+  // =========================================================================
+  console.log('📅 Seeding leave requests...');
+
+  const leaveTypes = [LeaveType.HOME, LeaveType.MEDICAL, LeaveType.EMERGENCY, LeaveType.OTHER];
+  const leaveReasons: Record<string, string[]> = {
+    HOME: ['Family function', 'Festival leave', 'Relative wedding', 'Home visit', 'Parent health checkup', 'Family emergency'],
+    MEDICAL: ['Dental appointment', 'Eye checkup', 'Fever and cold', 'Hospital follow-up', 'Lab tests', 'Surgery consultation'],
+    EMERGENCY: ['Family emergency', 'Accident at home', 'Natural disaster', 'Urgent family matter'],
+    OTHER: ['Internship interview', 'Competitive exam', 'Driving license test', 'Passport appointment', 'Visa interview'],
+  };
+
+  const activeStudents = studentUsers.filter((s) => s.status === UserStatus.ACTIVE);
+  const wardenEmails = allUsers.filter((u) => u.roleName === 'WARDEN').map((u) => u.email);
+  const parentEmails = allUsers.filter((u) => u.roleName === 'PARENT').map((u) => u.email);
+
+  let leaveCount = 0;
+  for (let i = 0; i < Math.min(60, activeStudents.length); i++) {
+    const s = activeStudents[i];
+    const studentId = createdUserIds[s.email];
+    const hostelId = hostelIdMap[s.hostelCode || 'KH'];
+    const type = pick(leaveTypes);
+    const reasons = leaveReasons[type] || leaveReasons['OTHER'];
+    const fromDays = randomInt(1, 30);
+    const duration = randomInt(1, 5);
+    const fromDate = daysAgo(fromDays);
+    const toDate = new Date(fromDate); toDate.setDate(toDate.getDate() + duration);
+
+    let status: LeaveStatus;
+    let parentApprovalAt: Date | null = null;
+    let wardenApprovalAt: Date | null = null;
+    let rejectedAt: Date | null = null;
+    let rejectionReason: string | null = null;
+    let wardenId: string | null = null;
+    let parentId: string | null = null;
+
+    const roll = randomInt(1, 10);
+    if (roll <= 3) {
+      status = LeaveStatus.PENDING;
+    } else if (roll <= 5) {
+      status = LeaveStatus.PARENT_APPROVED;
+      parentId = parentEmails.length ? createdUserIds[pick(parentEmails)] : null;
+      parentApprovalAt = daysAgo(fromDays - 1);
+    } else if (roll <= 8) {
+      status = LeaveStatus.WARDEN_APPROVED;
+      parentId = parentEmails.length ? createdUserIds[pick(parentEmails)] : null;
+      parentApprovalAt = daysAgo(fromDays - 1);
+      wardenId = wardenEmails.length ? createdUserIds[pick(wardenEmails)] : null;
+      wardenApprovalAt = daysAgo(fromDays - 1);
+    } else if (roll === 9) {
+      status = LeaveStatus.REJECTED;
+      wardenId = wardenEmails.length ? createdUserIds[pick(wardenEmails)] : null;
+      rejectedAt = daysAgo(fromDays - 1);
+      rejectionReason = pick(['Insufficient reason', 'Exam period — no leaves', 'Already on leave', 'Too many leaves this month']);
+    } else {
+      status = LeaveStatus.CANCELLED;
+    }
+
+    try {
+      await prisma.leaveRequest.create({
+        data: {
+          studentId,
+          hostelId,
+          type,
+          fromDate,
+          toDate,
+          reason: pick(reasons),
+          status,
+          parentApprovalAt,
+          wardenApprovalAt,
+          rejectedAt,
+          rejectionReason,
+          wardenId,
+          parentId,
+        },
+      });
+      leaveCount++;
+    } catch { /* skip duplicates */ }
+  }
+  console.log(`   ✓ ${leaveCount} leave requests\n`);
+
+  // =========================================================================
+  // 13. COMPLAINTS
+  // =========================================================================
+  console.log('🔧 Seeding complaints...');
+
+  const categories = [ComplaintCategory.MAINTENANCE, ComplaintCategory.ELECTRICAL, ComplaintCategory.PLUMBING, ComplaintCategory.HYGIENE, ComplaintCategory.MESS, ComplaintCategory.SECURITY, ComplaintCategory.OTHER];
+  const priorities = [ComplaintPriority.LOW, ComplaintPriority.MEDIUM, ComplaintPriority.HIGH, ComplaintPriority.CRITICAL];
+  const complaintSubjects: Record<string, string[]> = {
+    MAINTENANCE: ['Broken door lock', 'Window crack', 'Cupboard hinge broken', 'Ceiling fan wobbling', 'Wall paint peeling'],
+    ELECTRICAL: ['Socket not working', 'Light flickering', 'Power outage in room', 'Switch sparking', 'AC not cooling'],
+    PLUMBING: ['Tap leaking', 'Blocked drain', 'Low water pressure', 'Geyser not heating', 'Toilet flush issue'],
+    HYGIENE: ['Room not cleaned', 'Bathroom dirty', 'Corridor dusty', 'Garbage not collected', 'Pest issue'],
+    MESS: ['Food is cold', 'Meal quality poor', 'Insufficient quantity', 'Stale food served', 'No variety in menu'],
+    SECURITY: ['CCTV not working', 'Gate left open', 'Stranger spotted', 'Theft complaint', 'Missing belongings'],
+    OTHER: ['WiFi not working', 'Laundry machine broken', 'Water purifier issue', 'Noise complaint', 'Roommate issue'],
+  };
+
+  const maintenanceEmails = allUsers.filter((u) => u.roleName === 'MAINTENANCE_STAFF').map((u) => u.email);
+
+  let complaintCount = 0;
+  for (let i = 0; i < Math.min(45, activeStudents.length); i++) {
+    const s = activeStudents[i];
+    const studentId = createdUserIds[s.email];
+    const hostelId = hostelIdMap[s.hostelCode || 'KH'];
+    const category = pick(categories);
+    const subjects = complaintSubjects[category] || complaintSubjects['OTHER'];
+    const priority = pick(priorities);
+
+    let status: ComplaintStatus;
+    let assignedToId: string | null = null;
+    let resolvedAt: Date | null = null;
+    let resolution: string | null = null;
+
+    const roll = randomInt(1, 6);
+    if (roll === 1) {
+      status = ComplaintStatus.OPEN;
+    } else if (roll === 2) {
+      status = ComplaintStatus.ASSIGNED;
+      assignedToId = maintenanceEmails.length ? createdUserIds[pick(maintenanceEmails)] : null;
+    } else if (roll === 3) {
+      status = ComplaintStatus.IN_PROGRESS;
+      assignedToId = maintenanceEmails.length ? createdUserIds[pick(maintenanceEmails)] : null;
+    } else if (roll <= 5) {
+      status = ComplaintStatus.RESOLVED;
+      assignedToId = maintenanceEmails.length ? createdUserIds[pick(maintenanceEmails)] : null;
+      resolvedAt = daysAgo(randomInt(1, 5));
+      resolution = pick(['Fixed and verified', 'Part replaced', 'Cleaned and sanitized', 'Issue resolved by staff', 'Forwarded to vendor, resolved']);
+    } else {
+      status = ComplaintStatus.CLOSED;
+      assignedToId = maintenanceEmails.length ? createdUserIds[pick(maintenanceEmails)] : null;
+      resolvedAt = daysAgo(randomInt(5, 15));
+      resolution = 'Closed after verification';
+    }
+
+    try {
+      const complaint = await prisma.complaint.create({
+        data: {
+          studentId,
+          hostelId,
+          category,
+          subject: pick(subjects),
+          description: `Detailed description of the issue. Room ${randomInt(100, 310)}, Floor ${randomInt(0, 2)}. Needs attention.`,
+          priority,
+          status,
+          assignedToId,
+          resolvedAt,
+          resolution,
+        },
+      });
+
+      // Add 0-3 comments
+      const commentCount = randomInt(0, 3);
+      for (let c = 0; c < commentCount; c++) {
+        const commenter = pick([studentId, ...(assignedToId ? [assignedToId] : []), adminId]);
+        await prisma.complaintComment.create({
+          data: {
+            complaintId: complaint.id,
+            userId: commenter,
+            message: pick([
+              'Please look into this urgently.',
+              'We are working on it.',
+              'Any update on this?',
+              'Part has been ordered.',
+              'Scheduled for tomorrow.',
+              'Issue persists, please re-check.',
+              'Thank you for the quick fix!',
+            ]),
+          },
+        });
+      }
+      complaintCount++;
+    } catch { /* skip */ }
+  }
+  console.log(`   ✓ ${complaintCount} complaints\n`);
+
+  // =========================================================================
+  // 14. NOTICES
+  // =========================================================================
+  console.log('📢 Seeding notices...');
+
+  const noticeData = [
+    { title: 'Hostel Day Celebration', body: 'Annual hostel day will be celebrated on 15th March. All students are requested to participate. Events include cultural programs, sports, and prize distribution.', priority: NoticePriority.INFO, scope: NoticeScope.ALL },
+    { title: 'Water Supply Interruption', body: 'Due to maintenance work, water supply will be interrupted on 20th Feb from 10 AM to 4 PM. Please store water in advance.', priority: NoticePriority.WARNING, scope: NoticeScope.ALL },
+    { title: 'Emergency Evacuation Drill', body: 'Emergency evacuation drill will be conducted on 22nd Feb at 11 AM. All residents must participate. Assembly point: Main ground.', priority: NoticePriority.URGENT, scope: NoticeScope.ALL },
+    { title: 'Mess Menu Updated', body: 'New mess menu for March has been updated. Breakfast timings changed to 7:30 AM – 9:00 AM. Special diet options available on request.', priority: NoticePriority.INFO, scope: NoticeScope.ALL },
+    { title: 'WiFi Maintenance', body: 'WiFi maintenance scheduled for Sunday 2 AM – 6 AM. Internet will be unavailable during this window.', priority: NoticePriority.WARNING, scope: NoticeScope.ALL },
+    { title: 'Fee Payment Reminder', body: 'Last date for hostel fee payment is 28th Feb. Late fee of ₹500 will be charged after the deadline.', priority: NoticePriority.URGENT, scope: NoticeScope.ALL },
+    { title: 'Krishna Hostel — Room Inspection', body: 'Room inspection for Krishna Hostel scheduled for 25th Feb. Please keep rooms tidy.', priority: NoticePriority.WARNING, scope: NoticeScope.HOSTEL },
+    { title: 'Main Block — Fire Safety Check', body: 'Fire safety equipment inspection in Main Campus Block on 23rd Feb. Corridors must be clear.', priority: NoticePriority.WARNING, scope: NoticeScope.BUILDING },
+    { title: 'Sports Tournament Registration', body: 'Inter-hostel sports tournament registrations open. Register at the warden office by 10th March.', priority: NoticePriority.INFO, scope: NoticeScope.ALL },
+    { title: 'Curfew Timing Change', body: 'Effective 1st March, curfew timings changed to 10:30 PM (weekdays) and 11 PM (weekends).', priority: NoticePriority.URGENT, scope: NoticeScope.ALL },
+    { title: 'Guest Registration Mandatory', body: 'All visitors must register at the gate. Unregistered visitors will not be allowed entry.', priority: NoticePriority.WARNING, scope: NoticeScope.ALL },
+    { title: 'Library Hours Extended', body: 'Hostel library will now be open until 11 PM during exam season (March 10 – April 15).', priority: NoticePriority.INFO, scope: NoticeScope.ALL },
+  ];
+
+  const publisherIds = [...wardenEmails, ...allUsers.filter(u => u.roleName === 'HOSTEL_ADMIN').map(u => u.email)]
+    .map(e => createdUserIds[e]).filter(Boolean);
+
+  let noticeCount = 0;
+  for (const n of noticeData) {
+    const publishedById = pick(publisherIds) || adminId;
+    const published = daysAgo(randomInt(1, 30));
+    const expiresAt = new Date(published);
+    expiresAt.setDate(expiresAt.getDate() + randomInt(15, 60));
+
+    try {
+      const notice = await prisma.notice.create({
+        data: {
+          title: n.title,
+          body: n.body,
+          priority: n.priority,
+          scope: n.scope,
+          targetBuildingId: n.scope === NoticeScope.BUILDING ? buildingMap['MAIN'] : null,
+          targetHostelId: n.scope === NoticeScope.HOSTEL ? hostelIdMap['KH'] : null,
+          publishedById,
+          publishedAt: published,
+          expiresAt,
+          isActive: randomInt(1, 10) <= 8, // 80% active
+        },
+      });
+
+      // Mark some as read by random students
+      const readersCount = randomInt(5, 25);
+      const shuffledStudents = [...activeStudents].sort(() => Math.random() - 0.5).slice(0, readersCount);
+      for (const reader of shuffledStudents) {
+        const readerId = createdUserIds[reader.email];
+        try {
+          await prisma.noticeRecipient.create({
+            data: { noticeId: notice.id, userId: readerId, readAt: daysAgo(randomInt(0, 10)) },
+          });
+        } catch { /* unique constraint skip */ }
+      }
+      noticeCount++;
+    } catch { /* skip */ }
+  }
+  console.log(`   ✓ ${noticeCount} notices\n`);
+
+  // =========================================================================
+  // 15. GATE ENTRIES
+  // =========================================================================
+  console.log('🚪 Seeding gate entries...');
+
+  const gateNos = ['Gate-1', 'Gate-2', 'Gate-3'];
+  const securityEmails = allUsers.filter(u => u.roleName === 'SECURITY_GUARD').map(u => u.email);
+
+  let gateEntryCount = 0;
+  for (let i = 0; i < Math.min(80, activeStudents.length); i++) {
+    const s = activeStudents[i % activeStudents.length];
+    const studentId = createdUserIds[s.email];
+    const scannedById = securityEmails.length ? createdUserIds[pick(securityEmails)] : adminId;
+    const daysBack = randomInt(0, 14);
+    const timestamp = daysAgo(daysBack);
+    const type = i % 2 === 0 ? GateEntryType.IN : GateEntryType.OUT;
+    const isLate = type === GateEntryType.IN && randomInt(1, 5) === 1;
+
+    try {
+      await prisma.gateEntry.create({
+        data: {
+          studentId,
+          type,
+          gateNo: pick(gateNos),
+          scannedById,
+          timestamp,
+          isLateEntry: isLate,
+          lateMinutes: isLate ? randomInt(5, 90) : 0,
+          notes: isLate ? pick(['Arrived late from city', 'Bus delayed', 'Medical visit ran late']) : null,
+        },
+      });
+      gateEntryCount++;
+    } catch { /* skip */ }
+  }
+  console.log(`   ✓ ${gateEntryCount} gate entries\n`);
+
+  // =========================================================================
+  // 15b. POLICY SNAPSHOTS & VIOLATIONS
+  // =========================================================================
+  console.log('⚠️  Seeding policy snapshots & violations...');
+
+  // Fetch gate entries that were created as IN (potential violations)
+  const inEntries = await prisma.gateEntry.findMany({
+    where: { type: GateEntryType.IN },
+    take: 30,
+    orderBy: { timestamp: 'desc' },
+    include: {
+      student: {
+        include: {
+          bedAssignments: {
+            where: { status: AssignmentStatus.ACTIVE },
+            include: { bed: { include: { room: { include: { hostel: true } } } } },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  // Get active policies per building
+  const activePolicies = await prisma.buildingPolicy.findMany({
+    where: { isActive: true },
+  });
+  const policyByBuilding: Record<string, typeof activePolicies[0]> = {};
+  for (const pol of activePolicies) {
+    policyByBuilding[pol.buildingId] = pol;
+  }
+
+  let snapshotCount = 0;
+  let violationCount = 0;
+  let notifCount = 0;
+
+  const violationReasons = [
+    'Returned late after city outing',
+    'Bus from hometown was delayed',
+    'Medical visit ran over time',
+    'Missed last bus from market',
+    'Studying at college library',
+    'Returned from cultural event late',
+    'Traffic jam on Outer Ring Road',
+    'Metro service disrupted',
+    'Came back from family function late',
+    'Got delayed at college placement drive',
+  ];
+
+  const createdViolationIds: string[] = [];
+
+  for (let i = 0; i < Math.min(25, inEntries.length); i++) {
+    const entry = inEntries[i];
+    const assignment = entry.student.bedAssignments[0];
+    if (!assignment) continue;
+
+    const bldgId = assignment.bed.room.hostel.buildingId;
+    if (!bldgId) continue;
+    const policy = policyByBuilding[bldgId];
+    if (!policy) continue;
+
+    const isWeekend = [0, 6].includes(entry.timestamp.getDay());
+    const curfew = isWeekend ? (policy.weekendCurfew || '23:00') : (policy.weekdayCurfew || '22:00');
+
+    // Create snapshot
+    const snapshot = await prisma.policySnapshot.create({
+      data: {
+        buildingId: bldgId,
+        policyId: policy.id,
+        policyVersion: policy.version,
+        curfewTimeUsed: curfew,
+        toleranceMinUsed: policy.toleranceMin,
+        escalationRuleMin: policy.wardenEscalationMin || 30,
+        repeatedThreshold: policy.repeatedViolationThreshold || 3,
+        violationWindow: policy.violationWindow || 30,
+        notifyParentOnExit: policy.notifyParentOnExit,
+        notifyParentOnEntry: policy.notifyParentOnEntry,
+        notifyParentOnLate: policy.notifyParentOnLate,
+        notifyWardenOnLate: policy.notifyWardenOnLate,
+      },
+    });
+    snapshotCount++;
+
+    // Link snapshot to gate entry
+    await prisma.gateEntry.update({
+      where: { id: entry.id },
+      data: { policySnapshotId: snapshot.id },
+    });
+
+    // Create violation for late entries (every other one)
+    if (i % 2 === 0 && entry.isLateEntry) {
+      const violatedBy = entry.lateMinutes || randomInt(5, 60);
+      const [ch, cm] = curfew.split(':').map(Number);
+      const requestedTime = new Date(entry.timestamp);
+      requestedTime.setHours(ch, cm + (policy.toleranceMin || 15), 0, 0);
+
+      const repeatedCount = randomInt(0, 4);
+      let escalation: EscalationState = EscalationState.NONE;
+      const threshold = policy.repeatedViolationThreshold || 3;
+      if (repeatedCount >= threshold) escalation = EscalationState.ESCALATED;
+      else if (repeatedCount >= Math.floor(threshold / 2)) escalation = EscalationState.WARNED;
+
+      // Mark ~20% as resolved
+      const isResolved = randomInt(1, 5) === 1;
+      const resolvedBy = isResolved
+        ? (wardenEmails.length ? createdUserIds[pick(wardenEmails)] : adminId)
+        : null;
+
+      try {
+        const violation = await prisma.violation.create({
+          data: {
+            studentId: entry.studentId,
+            gateEntryId: entry.id,
+            policySnapshotId: snapshot.id,
+            type: ViolationType.LATE_ENTRY,
+            requestedOrApprovedTime: requestedTime,
+            actualTime: entry.timestamp,
+            violatedByMinutes: violatedBy,
+            reason: pick(violationReasons),
+            repeatedCountSnapshot: repeatedCount,
+            escalationState: isResolved ? EscalationState.RESOLVED : escalation,
+            notificationState: NotificationState.SENT,
+            resolvedAt: isResolved ? daysAgo(randomInt(0, 3)) : null,
+            resolvedById: resolvedBy,
+            resolvedNotes: isResolved ? pick(['Warned student verbally', 'Letter sent to parents', 'First-time offense, warned', 'Discussed with student and parent']) : null,
+          },
+        });
+        violationCount++;
+        createdViolationIds.push(violation.id);
+      } catch { /* skip */ }
+    }
+
+    // Create OVERSTAY violation for some entries (every 5th)
+    if (i % 5 === 0) {
+      const violatedBy = randomInt(30, 240);
+      const overstayTime = new Date(entry.timestamp);
+      overstayTime.setHours(overstayTime.getHours() - violatedBy / 60);
+
+      try {
+        const violation = await prisma.violation.create({
+          data: {
+            studentId: entry.studentId,
+            gateEntryId: entry.id,
+            policySnapshotId: snapshot.id,
+            type: ViolationType.OVERSTAY,
+            requestedOrApprovedTime: overstayTime,
+            actualTime: entry.timestamp,
+            violatedByMinutes: violatedBy,
+            reason: pick(['Leave period expired, student did not return on time', 'Extended stay without approval', 'Failed to return from home on scheduled date']),
+            repeatedCountSnapshot: randomInt(0, 2),
+            escalationState: pick([EscalationState.NONE, EscalationState.WARNED]),
+            notificationState: NotificationState.SENT,
+          },
+        });
+        violationCount++;
+        createdViolationIds.push(violation.id);
+      } catch { /* skip */ }
+    }
+  }
+  console.log(`   ✓ ${snapshotCount} policy snapshots, ${violationCount} violations\n`);
+
+  // =========================================================================
+  // 15c. NOTIFICATIONS
+  // =========================================================================
+  console.log('🔔 Seeding notifications...');
+
+  // Gather recipient pools
+  const parentIds = parentEmails.map((e) => createdUserIds[e]).filter(Boolean);
+  const wardenIds = wardenEmails.map((e) => createdUserIds[e]).filter(Boolean);
+  const studentIds = activeStudents.map((s) => createdUserIds[s.email]).filter(Boolean);
+  const allRecipientIds = [...parentIds, ...wardenIds, ...studentIds];
+
+  const notifTemplates = [
+    { title: 'Student checked out', message: '{student} has exited at {gate}. Time: {time}.' },
+    { title: 'Student returned safely', message: '{student} has returned to the hostel. On-time entry recorded.' },
+    { title: '⚠️ Late entry alert', message: '{student} arrived {minutes} minutes past curfew. Policy violation auto-recorded.' },
+    { title: 'Leave request approved', message: 'Your leave request has been approved by the warden.' },
+    { title: 'Violation warning', message: 'You have accumulated {count} violations this month. Further infractions may lead to escalation.' },
+    { title: 'Escalation notice', message: 'A repeated violations escalation has been filed for {student}. Immediate review required.' },
+    { title: 'Complaint resolved', message: 'Your complaint #{id} has been resolved. Please confirm satisfaction.' },
+    { title: 'New notice posted', message: 'A new notice "{title}" has been published. Please check the notice board.' },
+    { title: 'Parent notification', message: 'Your ward {student} violated curfew. Violated by {minutes} minutes.' },
+    { title: 'System maintenance', message: 'The hostel management system will undergo maintenance tonight from 2 AM to 4 AM.' },
+  ];
+
+  // Create ~40 spread across users
+  for (let i = 0; i < 40; i++) {
+    const recipientId = pick(allRecipientIds);
+    if (!recipientId) continue;
+    const template = pick(notifTemplates);
+    const dBack = randomInt(0, 14);
+    const notifTime = daysAgo(dBack);
+    const isRead = randomInt(1, 3) === 1;
+
+    // Optionally link to a violation
+    const hasViolation = template.title.includes('Late') || template.title.includes('Violation') || template.title.includes('Escalation');
+    const violationId = hasViolation && createdViolationIds.length ? pick(createdViolationIds) : null;
+
+    try {
+      await prisma.notification.create({
+        data: {
+          recipientId,
+          channel: pick([NotificationChannel.IN_APP, NotificationChannel.IN_APP, NotificationChannel.IN_APP, NotificationChannel.EMAIL]),
+          title: template.title,
+          message: template.message
+            .replace('{student}', pick(MALE_FIRST_NAMES) + ' ' + pick(LAST_NAMES))
+            .replace('{gate}', pick(['Gate-1', 'Gate-2', 'Gate-3']))
+            .replace('{time}', `${randomInt(18, 23)}:${String(randomInt(0, 59)).padStart(2, '0')}`)
+            .replace('{minutes}', String(randomInt(5, 90)))
+            .replace('{count}', String(randomInt(2, 5)))
+            .replace('{id}', String(randomInt(1000, 9999)))
+            .replace('{title}', pick(['Hostel Day Celebration', 'Exam Timetable Update', 'Water Supply Disruption'])),
+          state: isRead ? NotificationState.READ : NotificationState.SENT,
+          readAt: isRead ? daysAgo(randomInt(0, dBack)) : null,
+          sentAt: notifTime,
+          violationId,
+        },
+      });
+      notifCount++;
+    } catch { /* skip */ }
+  }
+  console.log(`   ✓ ${notifCount} notifications\n`);
+
+  // =========================================================================
+  // 16. GATE PASSES
+  // =========================================================================
+  console.log('🎫 Seeding gate passes...');
+
+  let gatePassCount = 0;
+  for (let i = 0; i < Math.min(30, activeStudents.length); i++) {
+    const s = activeStudents[i * 2 % activeStudents.length];
+    const studentId = createdUserIds[s.email];
+    const validFrom = daysAgo(randomInt(0, 10));
+    const validTo = new Date(validFrom);
+    validTo.setHours(validTo.getHours() + randomInt(2, 48));
+
+    let status: GatePassStatus;
+    const roll = randomInt(1, 4);
+    if (roll === 1) status = GatePassStatus.ACTIVE;
+    else if (roll === 2) status = GatePassStatus.USED;
+    else if (roll === 3) status = GatePassStatus.EXPIRED;
+    else status = GatePassStatus.CANCELLED;
+
+    try {
+      await prisma.gatePass.create({
+        data: {
+          studentId,
+          purpose: pick(['Family visit', 'Medical appointment', 'Shopping', 'Event attendance', 'Bank work', 'Internship interview', 'Driving class']),
+          visitorName: randomInt(1, 3) === 1 ? `${pick(MALE_FIRST_NAMES)} ${pick(LAST_NAMES)}` : null,
+          visitorPhone: randomInt(1, 3) === 1 ? uniqueMobile() : null,
+          validFrom,
+          validTo,
+          status,
+          approvedById: pick(publisherIds) || adminId,
+        },
+      });
+      gatePassCount++;
+    } catch { /* skip */ }
+  }
+  console.log(`   ✓ ${gatePassCount} gate passes\n`);
+
+  // =========================================================================
+  // 17. SUMMARY
   // =========================================================================
   console.log('═══════════════════════════════════════════════════════');
   console.log('  ✅ SEED COMPLETED SUCCESSFULLY');
@@ -1235,6 +1771,14 @@ async function main() {
   console.log(`     Student Profiles:    ${profileCount}`);
   console.log(`     Guardian Links:      ${guardianLinkCount}`);
   console.log(`     Bed Assignments:     ${assignmentCount}`);
+  console.log(`     Leave Requests:      ${leaveCount}`);
+  console.log(`     Complaints:          ${complaintCount}`);
+  console.log(`     Notices:             ${noticeCount}`);
+  console.log(`     Gate Entries:        ${gateEntryCount}`);
+  console.log(`     Policy Snapshots:    ${snapshotCount}`);
+  console.log(`     Violations:          ${violationCount}`);
+  console.log(`     Notifications:       ${notifCount}`);
+  console.log(`     Gate Passes:         ${gatePassCount}`);
   console.log();
   console.log('  🏨 Hostels Represented:');
   HOSTELS.forEach((h) => {

@@ -10,6 +10,12 @@ import { BuildingsModule } from './buildings/buildings.module';
 import { PoliciesModule } from './policies/policies.module';
 import { StudentsModule } from './students/students.module';
 import { AllotmentsModule } from './allotments/allotments.module';
+import { LeaveModule } from './leave/leave.module';
+import { ComplaintsModule } from './complaints/complaints.module';
+import { NoticesModule } from './notices/notices.module';
+import { GateModule } from './gate/gate.module';
+import { ViolationsModule } from './violations/violations.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { HealthModule } from './health/health.module';
 import { AuditModule } from './audit/audit.module';
@@ -46,6 +52,12 @@ import { AuditModule } from './audit/audit.module';
     PoliciesModule,
     StudentsModule,
     AllotmentsModule,
+    LeaveModule,
+    ComplaintsModule,
+    NoticesModule,
+    GateModule,
+    ViolationsModule,
+    NotificationsModule,
     DashboardModule,
     HealthModule,
   ],

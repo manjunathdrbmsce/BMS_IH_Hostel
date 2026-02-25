@@ -1,11 +1,12 @@
 import { cn } from '@/lib/utils';
 import { type LucideIcon } from 'lucide-react';
+import { type ReactNode } from 'react';
 
 interface StatCardProps {
   title: string;
   value: string | number;
   subtitle?: string;
-  icon: LucideIcon;
+  icon: LucideIcon | ReactNode;
   iconColor?: string;
   iconBg?: string;
   trend?: { value: number; label: string };
@@ -16,12 +17,15 @@ export function StatCard({
   title,
   value,
   subtitle,
-  icon: Icon,
+  icon,
   iconColor = 'text-indigo-600',
   iconBg = 'bg-indigo-50',
   trend,
   className,
 }: StatCardProps) {
+  // Determine if icon is a component or a rendered element
+  const isComponent = typeof icon === 'function';
+  const IconComponent = isComponent ? (icon as LucideIcon) : null;
   return (
     <div
       className={cn(
@@ -52,7 +56,7 @@ export function StatCard({
           )}
         </div>
         <div className={cn('p-3 rounded-xl', iconBg)}>
-          <Icon className={cn('w-6 h-6', iconColor)} />
+          {IconComponent ? <IconComponent className={cn('w-6 h-6', iconColor)} /> : (icon as ReactNode)}
         </div>
       </div>
     </div>

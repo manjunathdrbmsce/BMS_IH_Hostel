@@ -23,6 +23,7 @@ export interface UserProfile {
 
 interface AuthContextType {
   user: UserProfile | null;
+  token: string | null;
   loading: boolean;
   login: (identifier: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -105,9 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, logout, hasRole, hasPermission }}
+      value={{ user, token, loading, login, logout, hasRole, hasPermission }}
     >
       {children}
     </AuthContext.Provider>
