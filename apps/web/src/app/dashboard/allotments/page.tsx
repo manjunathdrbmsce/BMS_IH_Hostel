@@ -34,14 +34,10 @@ interface BedAssignment {
   assignedById: string;
   student: {
     id: string;
-    user: {
-      firstName: string;
-      lastName: string;
-      email: string;
-      usn: string | null;
-    };
-    department: string | null;
-    year: number | null;
+    firstName: string;
+    lastName: string;
+    email: string;
+    usn: string | null;
   };
   bed: {
     id: string;
@@ -209,9 +205,9 @@ export default function AllotmentsPage() {
     ? assignments.filter((a) => {
         const term = search.toLowerCase();
         return (
-          a.student.user.firstName.toLowerCase().includes(term) ||
-          a.student.user.lastName.toLowerCase().includes(term) ||
-          (a.student.user.usn && a.student.user.usn.toLowerCase().includes(term)) ||
+          a.student.firstName.toLowerCase().includes(term) ||
+          a.student.lastName.toLowerCase().includes(term) ||
+          (a.student.usn && a.student.usn.toLowerCase().includes(term)) ||
           a.bed.bedNo.toLowerCase().includes(term) ||
           a.bed.room.hostel.name.toLowerCase().includes(term)
         );
@@ -302,9 +298,9 @@ export default function AllotmentsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium text-sm text-gray-900">
-                        {a.student.user.firstName} {a.student.user.lastName}
+                        {a.student.firstName} {a.student.lastName}
                       </h3>
-                      {a.student.user.usn && <Badge variant="default">{a.student.user.usn}</Badge>}
+                      {a.student.usn && <Badge variant="default">{a.student.usn}</Badge>}
                     </div>
                     <p className="text-xs text-gray-500 mt-0.5">
                       Bed {a.bed.bedNo} · Room {a.bed.room.roomNo} · Floor {a.bed.room.floor} · {a.bed.room.hostel.name}
@@ -407,9 +403,9 @@ export default function AllotmentsPage() {
               </div>
               <div>
                 <h3 className="font-semibold text-gray-900">
-                  {selectedAssignment.student.user.firstName} {selectedAssignment.student.user.lastName}
+                  {selectedAssignment.student.firstName} {selectedAssignment.student.lastName}
                 </h3>
-                <p className="text-xs text-gray-500">{selectedAssignment.student.user.email}</p>
+                <p className="text-xs text-gray-500">{selectedAssignment.student.email}</p>
               </div>
               <Badge variant={statusBadge(selectedAssignment.status)} className="ml-auto">
                 {formatStatus(selectedAssignment.status)}
@@ -417,8 +413,7 @@ export default function AllotmentsPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="USN" value={selectedAssignment.student.user.usn || '—'} />
-              <Field label="Department" value={selectedAssignment.student.department || '—'} />
+              <Field label="USN" value={selectedAssignment.student.usn || '—'} />
               <Field label="Bed" value={selectedAssignment.bed.bedNo} />
               <Field label="Room" value={selectedAssignment.bed.room.roomNo} />
               <Field label="Floor" value={String(selectedAssignment.bed.room.floor)} />

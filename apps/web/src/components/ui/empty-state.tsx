@@ -22,8 +22,14 @@ export function EmptyState({
 }: EmptyStateProps) {
   const renderIcon = () => {
     if (!IconOrNode) return null;
-    // Component type (lucide icons)
-    if (typeof IconOrNode === 'function') {
+    // Component type (lucide icons use forwardRef — objects with $$typeof + render)
+    if (
+      typeof IconOrNode === 'function' ||
+      (typeof IconOrNode === 'object' &&
+        IconOrNode !== null &&
+        '$$typeof' in IconOrNode &&
+        'render' in IconOrNode)
+    ) {
       const Icon = IconOrNode as React.ElementType;
       return <Icon className="w-12 h-12" />;
     }

@@ -5,6 +5,7 @@
 // Phase 3: Buildings, Policies, Student Profiles, Allotments
 // Phase 4: Leave, Complaints, Notices, Gate Management
 // Phase 5: Violations, Policy Snapshots, Notifications
+// Phase 6: Student Registration / Hostel Admission
 // =============================================================================
 
 generator client {
@@ -64,6 +65,11 @@ model User {
   violations            Violation[]         @relation("ViolationStudent")
   violationsResolved    Violation[]         @relation("ViolationResolver")
   notificationsReceived Notification[]      @relation("NotificationRecipient")
+
+  // Phase 6 relations
+  hostelRegistrations   HostelRegistration[] @relation("RegistrationStudent")
+  registrationsReviewed HostelRegistration[] @relation("RegistrationReviewer")
+  registrationFees      RegistrationFee[]    @relation("FeeRecordedBy")
 
   @@index([email])
   @@index([mobile])
@@ -223,6 +229,9 @@ model Hostel {
   leaveRequests LeaveRequest[]
   complaints    Complaint[]
   notices       Notice[]      @relation("NoticeHostel")
+
+  // Phase 6 relations
+  hostelRegistrations HostelRegistration[]
 
   @@index([type])
   @@index([status])
@@ -421,6 +430,42 @@ model StudentProfile {
   emergencyContact String? @map("emergency_contact") @db.VarChar(20)
   permanentAddress String? @map("permanent_address") @db.Text
   medicalConditions String? @map("medical_conditions") @db.Text
+
+  // Phase 6: Extended fields from BMS admission form
+  fatherName          String?   @map("father_name") @db.VarChar(200)
+  motherName          String?   @map("mother_name") @db.VarChar(200)
+  fatherOccupation    String?   @map("father_occupation") @db.VarChar(200)
+  motherOccupation    String?   @map("mother_occupation") @db.VarChar(200)
+  motherTongue        String?   @map("mother_tongue") @db.VarChar(50)
+  nationality         String?   @db.VarChar(50)
+  religion            String?   @db.VarChar(50)
+  category            String?   @db.VarChar(30) // SC, ST, OBC, GM, etc.
+  pucPercentage       Float?    @map("puc_percentage")  // PCM percentage
+  admissionMode       AdmissionMode? @map("admission_mode")
+  communicationAddress String?  @map("communication_address") @db.Text
+
+  // Parent contacts
+  fatherEmail         String?   @map("father_email") @db.VarChar(255)
+  fatherMobile        String?   @map("father_mobile") @db.VarChar(20)
+  fatherLandline      String?   @map("father_landline") @db.VarChar(20)
+  motherEmail         String?   @map("mother_email") @db.VarChar(255)
+  motherMobile        String?   @map("mother_mobile") @db.VarChar(20)
+  motherLandline      String?   @map("mother_landline") @db.VarChar(20)
+
+  // Local guardian (for emergency / outstation students)
+  localGuardianName    String?  @map("local_guardian_name") @db.VarChar(200)
+  localGuardianAddress String?  @map("local_guardian_address") @db.Text
+  localGuardianMobile  String?  @map("local_guardian_mobile") @db.VarChar(20)
+  localGuardianLandline String? @map("local_guardian_landline") @db.VarChar(20)
+  localGuardianEmail   String?  @map("local_guardian_email") @db.VarChar(255)
+
+  // International student details
+  passportNo           String?  @map("passport_no") @db.VarChar(50)
+  visaDetails          String?  @map("visa_details") @db.Text
+  residentialPermit    String?  @map("residential_permit") @db.Text
+
+  // Photo
+  photoUrl             String?  @map("photo_url") @db.VarChar(500)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -884,4 +929,124 @@ enum NotificationChannel {
   EMAIL
   SMS
   PUSH
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: Student Registration / Hostel Admission
+// ---------------------------------------------------------------------------
+
+enum AdmissionMode {
+  CET
+  COMEDK
+  MANAGEMENT
+  NRI
+  NRI_SPONSORED
+  PIO
+  FOREIGN_NATIONAL
+  OTHER
+}
+
+enum RegistrationStatus {
+  DRAFT                // Student started but hasn't submitted
+  SUBMITTED            // Student submitted the form
+  UNDER_REVIEW         // Admin/Warden is reviewing
+  DOCUMENTS_PENDING    // Documents incomplete, needs resubmission
+  APPROVED             // Application approved, pending allotment
+  ALLOTTED             // Room/bed allotted, registration complete
+  REJECTED             // Application rejected
+  CANCELLED            // Student cancelled the application
+  WAITLISTED           // Capacity full, student on waitlist
+}
+
+model HostelRegistration {
+  id              String              @id @default(uuid()) @db.Uuid
+  applicationNo   String              @unique @map("application_no") @db.VarChar(20) // Sequential: IH-2026-0001
+  studentId       String              @map("student_id") @db.Uuid
+  academicYear    String              @map("academic_year") @db.VarChar(9) // e.g., 2025-2026
+  hostelId        String?             @map("hostel_id") @db.Uuid      // Preferred hostel
+  status          RegistrationStatus  @default(DRAFT)
+
+  // Snapshot of student details at registration time (for historical record)
+  studentSnapshot Json?               @map("student_snapshot")
+
+  // Room/Mess preferences
+  roomTypePreference String?          @map("room_type_preference") @db.VarChar(20) // SINGLE, DOUBLE, TRIPLE
+  messType           String?          @map("mess_type") @db.VarChar(10)            // VEG, NON_VEG
+  previousHostelHistory String?       @map("previous_hostel_history") @db.Text
+
+  // Declarations (digital signatures)
+  hosteliteDeclarationAccepted   Boolean   @default(false) @map("hostelite_declaration_accepted")
+  hosteliteDeclarationAt         DateTime? @map("hostelite_declaration_at")
+  hosteliteDeclarationDocUrl     String?   @map("hostelite_declaration_doc_url") @db.Text
+  antiRaggingStudentAccepted     Boolean   @default(false) @map("anti_ragging_student_accepted")
+  antiRaggingStudentAt           DateTime? @map("anti_ragging_student_at")
+  antiRaggingStudentDocUrl       String?   @map("anti_ragging_student_doc_url") @db.Text
+  antiRaggingParentAccepted      Boolean   @default(false) @map("anti_ragging_parent_accepted")
+  antiRaggingParentAt            DateTime? @map("anti_ragging_parent_at")
+  antiRaggingParentDocUrl        String?   @map("anti_ragging_parent_doc_url") @db.Text
+  hostelAgreementAccepted        Boolean   @default(false) @map("hostel_agreement_accepted")
+  hostelAgreementAt              DateTime? @map("hostel_agreement_at")
+  hostelAgreementDocUrl          String?   @map("hostel_agreement_doc_url") @db.Text
+  raggingPreventionAccepted      Boolean   @default(false) @map("ragging_prevention_accepted")
+  raggingPreventionAt            DateTime? @map("ragging_prevention_at")
+  raggingPreventionDocUrl        String?   @map("ragging_prevention_doc_url") @db.Text
+
+  // Admin review
+  reviewedById     String?    @map("reviewed_by_id") @db.Uuid
+  reviewedAt       DateTime?  @map("reviewed_at")
+  reviewNotes      String?    @map("review_notes") @db.Text
+  rejectionReason  String?    @map("rejection_reason") @db.Text
+
+  // Office use (generated after approval)
+  hostelIdNo       String?    @map("hostel_id_no") @db.VarChar(30) // Hostel ID number
+  messRollNo       String?    @map("mess_roll_no") @db.VarChar(30) // Mess Roll number
+  dateOfOccupation DateTime?  @map("date_of_occupation") @db.Date
+
+  // Submitted / completed timestamps
+  submittedAt      DateTime?  @map("submitted_at")
+  completedAt      DateTime?  @map("completed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  student    User      @relation("RegistrationStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  hostel     Hostel?   @relation(fields: [hostelId], references: [id])
+  reviewedBy User?     @relation("RegistrationReviewer", fields: [reviewedById], references: [id])
+  fees       RegistrationFee[]
+
+  @@index([studentId])
+  @@index([status])
+  @@index([academicYear])
+  @@index([applicationNo])
+  @@map("hostel_registrations")
+}
+
+model RegistrationFee {
+  id              String   @id @default(uuid()) @db.Uuid
+  registrationId  String   @map("registration_id") @db.Uuid
+  feeType         FeeType  @map("fee_type")
+  amount          Float
+  receiptNo       String?  @map("receipt_no") @db.VarChar(50)
+  paidAt          DateTime? @map("paid_at") @db.Date
+  recordedById    String?  @map("recorded_by_id") @db.Uuid
+  notes           String?  @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  registration HostelRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  recordedBy   User?              @relation("FeeRecordedBy", fields: [recordedById], references: [id])
+
+  @@index([registrationId])
+  @@index([feeType])
+  @@map("registration_fees")
+}
+
+enum FeeType {
+  HOSTEL_FEE
+  MESS_FEE
+  CAUTION_DEPOSIT
+  OTHER
 }

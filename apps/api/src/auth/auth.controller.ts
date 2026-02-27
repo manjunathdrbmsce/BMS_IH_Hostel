@@ -18,7 +18,7 @@ import {
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
-import { LoginDto, RefreshTokenDto } from './dto';
+import { LoginDto, RefreshTokenDto, StudentSignupDto } from './dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuditInterceptor } from '../audit/audit.interceptor';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -39,6 +39,24 @@ export class AuthController {
   @ApiResponse({ status: 429, description: 'Too many attempts' })
   async login(@Body() dto: LoginDto, @Req() req: Request) {
     const result = await this.authService.login(dto, {
+      ipAddress: this.getClientIp(req),
+      userAgent: req.headers['user-agent'],
+    });
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @Post('signup')
+  @Throttle({ default: { ttl: 60000, limit: 3 } }) // 3 signups per minute per IP
+  @ApiOperation({ summary: 'Student self-registration' })
+  @ApiResponse({ status: 201, description: 'Account created, auto-logged in' })
+  @ApiResponse({ status: 409, description: 'Duplicate email/mobile/USN' })
+  @ApiResponse({ status: 429, description: 'Too many attempts' })
+  async signup(@Body() dto: StudentSignupDto, @Req() req: Request) {
+    const result = await this.authService.signup(dto, {
       ipAddress: this.getClientIp(req),
       userAgent: req.headers['user-agent'],
     });

@@ -8,6 +8,7 @@ import {
   UseGuards,
   UseInterceptors,
   ParseUUIDPipe,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -50,6 +51,21 @@ export class ViolationsController {
     return { success: true, data: stats };
   }
 
+  @Get('my')
+  @Roles('STUDENT')
+  @ApiOperation({ summary: 'Get my violations (student-only)' })
+  @ApiResponse({ status: 200, description: 'My violations' })
+  async getMyViolations(
+    @CurrentUser() user: any,
+    @Query() query: ListViolationsQueryDto,
+  ) {
+    const result = await this.violationsService.getStudentViolations(
+      user.id,
+      query,
+    );
+    return { success: true, ...result };
+  }
+
   @Get('student/:studentId')
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT')
   @ApiOperation({ summary: 'Get violations for a specific student' })
@@ -57,7 +73,13 @@ export class ViolationsController {
   async getStudentViolations(
     @Param('studentId', ParseUUIDPipe) studentId: string,
     @Query() query: ListViolationsQueryDto,
+    @CurrentUser() user: any,
   ) {
+    // Students can only view their own violations
+    const isStudent = user.roles?.includes('STUDENT');
+    if (isStudent && studentId !== user.id) {
+      throw new NotFoundException('Violations not found');
+    }
     const result = await this.violationsService.getStudentViolations(
       studentId,
       query,
@@ -66,11 +88,16 @@ export class ViolationsController {
   }
 
   @Get(':id')
-  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN')
+  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT')
   @ApiOperation({ summary: 'Get violation by ID' })
   @ApiResponse({ status: 200, description: 'Violation details' })
-  async findById(@Param('id', ParseUUIDPipe) id: string) {
+  async findById(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     const violation = await this.violationsService.findById(id);
+    // Students can only view their own violations
+    const isStudent = user.roles?.includes('STUDENT');
+    if (isStudent && violation.studentId !== user.id) {
+      throw new NotFoundException('Violation not found');
+    }
     return { success: true, data: violation };
   }
 

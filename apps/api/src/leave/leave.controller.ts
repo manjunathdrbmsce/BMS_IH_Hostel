@@ -8,6 +8,7 @@ import {
   UseGuards,
   UseInterceptors,
   ParseUUIDPipe,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -46,7 +47,13 @@ export class LeaveController {
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT', 'PARENT')
   @ApiOperation({ summary: 'List leave requests with filters' })
   @ApiResponse({ status: 200, description: 'Leave requests list' })
-  async findAll(@Query() query: ListLeaveQueryDto) {
+  async findAll(@Query() query: ListLeaveQueryDto, @CurrentUser() user: any) {
+    // Students & parents can only see their own leave requests
+    const isStudent = user.roles?.includes('STUDENT');
+    const isParent = user.roles?.includes('PARENT');
+    if (isStudent || isParent) {
+      query.studentId = user.id;
+    }
     const result = await this.leaveService.findMany(query);
     return { success: true, ...result };
   }
@@ -65,8 +72,14 @@ export class LeaveController {
   @ApiOperation({ summary: 'Get leave request by ID' })
   @ApiResponse({ status: 200, description: 'Leave request details' })
   @ApiResponse({ status: 404, description: 'Leave request not found' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     const leave = await this.leaveService.findById(id);
+    // Students & parents can only view their own leave requests
+    const isStudent = user.roles?.includes('STUDENT');
+    const isParent = user.roles?.includes('PARENT');
+    if ((isStudent || isParent) && leave.studentId !== user.id) {
+      throw new NotFoundException('Leave request not found');
+    }
     return { success: true, data: leave };
   }
 

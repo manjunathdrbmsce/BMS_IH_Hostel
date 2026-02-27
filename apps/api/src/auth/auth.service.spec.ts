@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { UnauthorizedException, ForbiddenException } from '@nestjs/common';
+import { UnauthorizedException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -11,9 +11,14 @@ import * as bcrypt from 'bcrypt';
 // ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
+const mockTransaction = jest.fn();
+
 const mockPrismaService = {
   user: {
     findFirst: jest.fn(),
+    findUnique: jest.fn(),
+  },
+  role: {
     findUnique: jest.fn(),
   },
   refreshToken: {
@@ -22,6 +27,7 @@ const mockPrismaService = {
     update: jest.fn(),
     updateMany: jest.fn(),
   },
+  $transaction: mockTransaction,
 };
 
 const mockJwtService = {
@@ -121,7 +127,11 @@ describe('AuthService', () => {
       expect(result).toHaveProperty('accessToken', 'mock-access-token');
       expect(result).toHaveProperty('refreshToken', 'mock-refresh-token');
       expect(result.user.email).toBe('admin@bms.local');
-      expect(result.user.roles).toContain('SUPER_ADMIN');
+      expect(result.user.roles).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'SUPER_ADMIN', displayName: 'Super Admin' }),
+        ]),
+      );
       expect(mockAuditService.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'LOGIN' }),
       );
@@ -183,7 +193,11 @@ describe('AuthService', () => {
       const profile = await authService.getProfile(testUser.id);
 
       expect(profile.email).toBe('admin@bms.local');
-      expect(profile.roles).toContain('SUPER_ADMIN');
+      expect(profile.roles).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'SUPER_ADMIN', displayName: 'Super Admin' }),
+        ]),
+      );
       expect(profile.permissions).toContain('USER_CREATE');
     });
 
@@ -236,6 +250,110 @@ describe('AuthService', () => {
       expect(hash).toBeDefined();
       expect(hash).not.toBe('TestPassword@1');
       expect(await bcrypt.compare('TestPassword@1', hash)).toBe(true);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Student Signup
+  // -------------------------------------------------------------------------
+  describe('signup', () => {
+    const signupDto = {
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john.doe@bms.edu',
+      mobile: '9876543210',
+      password: 'Student@123',
+    };
+    const meta = { ipAddress: '127.0.0.1', userAgent: 'test-agent' };
+
+    const mockStudentRole = { id: 'role-student', name: 'STUDENT', displayName: 'Student' };
+    const mockCreatedUser = {
+      id: '00000000-0000-0000-0000-000000000099',
+      email: 'john.doe@bms.edu',
+      mobile: '9876543210',
+      usn: null,
+      firstName: 'John',
+      lastName: 'Doe',
+      status: UserStatus.ACTIVE,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    it('should create a student account and return tokens', async () => {
+      mockPrismaService.user.findFirst.mockResolvedValue(null); // no duplicate
+      mockPrismaService.role.findUnique.mockResolvedValue(mockStudentRole);
+      mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => {
+        return cb({
+          user: { create: jest.fn().mockResolvedValue(mockCreatedUser) },
+          userRole: { create: jest.fn().mockResolvedValue({}) },
+        });
+      });
+      mockJwtService.signAsync
+        .mockResolvedValueOnce('student-access-token')
+        .mockResolvedValueOnce('student-refresh-token');
+      mockPrismaService.refreshToken.create.mockResolvedValue({});
+
+      const result = await authService.signup(signupDto, meta);
+
+      expect(result.accessToken).toBe('student-access-token');
+      expect(result.refreshToken).toBe('student-refresh-token');
+      expect(result.user.email).toBe('john.doe@bms.edu');
+      expect(result.user.firstName).toBe('John');
+      expect(result.user.roles).toEqual([{ name: 'STUDENT', displayName: 'Student' }]);
+      expect(mockAuditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'STUDENT_SIGNUP' }),
+      );
+    });
+
+    it('should throw ConflictException when email already exists', async () => {
+      mockPrismaService.user.findFirst.mockResolvedValue({
+        ...mockCreatedUser,
+        email: 'john.doe@bms.edu',
+      });
+
+      await expect(authService.signup(signupDto, meta)).rejects.toThrow(ConflictException);
+      await expect(authService.signup(signupDto, meta)).rejects.toThrow(
+        /email already exists/i,
+      );
+    });
+
+    it('should throw ConflictException when mobile already exists', async () => {
+      mockPrismaService.user.findFirst.mockResolvedValue({
+        ...mockCreatedUser,
+        email: 'other@bms.edu',
+        mobile: '9876543210',
+      });
+
+      await expect(authService.signup(signupDto, meta)).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw Error when STUDENT role is not configured', async () => {
+      mockPrismaService.user.findFirst.mockResolvedValue(null);
+      mockPrismaService.role.findUnique.mockResolvedValue(null);
+
+      await expect(authService.signup(signupDto, meta)).rejects.toThrow(
+        'STUDENT role not configured in the system',
+      );
+    });
+
+    it('should accept optional USN field', async () => {
+      const dtoWithUsn = { ...signupDto, usn: '1BM22CS001' };
+      mockPrismaService.user.findFirst.mockResolvedValue(null);
+      mockPrismaService.role.findUnique.mockResolvedValue(mockStudentRole);
+      mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => {
+        return cb({
+          user: { create: jest.fn().mockResolvedValue({ ...mockCreatedUser, usn: '1BM22CS001' }) },
+          userRole: { create: jest.fn().mockResolvedValue({}) },
+        });
+      });
+      mockJwtService.signAsync
+        .mockResolvedValueOnce('access-tok')
+        .mockResolvedValueOnce('refresh-tok');
+      mockPrismaService.refreshToken.create.mockResolvedValue({});
+
+      const result = await authService.signup(dtoWithUsn, meta);
+      expect(result.accessToken).toBe('access-tok');
+      expect(result.user.roles[0].name).toBe('STUDENT');
     });
   });
 });

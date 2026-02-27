@@ -23,8 +23,8 @@ export function StatCard({
   trend,
   className,
 }: StatCardProps) {
-  // Determine if icon is a component or a rendered element
-  const isComponent = typeof icon === 'function';
+  // Determine if icon is a component (function or forwardRef object) or a rendered element
+  const isComponent = typeof icon === 'function' || (typeof icon === 'object' && icon !== null && '$$typeof' in icon && 'render' in icon);
   const IconComponent = isComponent ? (icon as LucideIcon) : null;
   return (
     <div

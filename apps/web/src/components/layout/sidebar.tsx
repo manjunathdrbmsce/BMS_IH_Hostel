@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
-import { NAV_ITEMS } from '@/lib/constants';
+import { NAV_SECTIONS, type NavSection } from '@/lib/constants';
 import { Avatar } from '@/components/ui/avatar';
 import {
   LayoutDashboard,
@@ -53,9 +53,13 @@ export function Sidebar() {
   const { user, logout, hasRole } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
-  const visibleItems = NAV_ITEMS.filter((item) =>
-    hasRole(...item.roles),
-  );
+  // Filter sections: only show sections that have at least one visible item
+  const visibleSections: NavSection[] = NAV_SECTIONS
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => hasRole(...item.roles)),
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <aside
@@ -82,39 +86,59 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-        {visibleItems.map((item) => {
-          const Icon = iconMap[item.icon] || LayoutDashboard;
-          const isActive =
-            item.href === '/dashboard'
-              ? pathname === '/dashboard'
-              : pathname.startsWith(item.href);
+      <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-4">
+        {visibleSections.map((section, sIdx) => (
+          <div key={section.label}>
+            {/* Section header — hidden when collapsed, skip for first section */}
+            {!collapsed && sIdx > 0 && (
+              <div className="flex items-center gap-2 px-3 pt-2 pb-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-400">
+                  {section.label}
+                </span>
+                <div className="flex-1 h-px bg-gray-100" />
+              </div>
+            )}
+            {/* Thin divider when collapsed */}
+            {collapsed && sIdx > 0 && (
+              <div className="mx-3 my-2 h-px bg-gray-100" />
+            )}
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150',
-                isActive
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
-              )}
-              title={collapsed ? item.label : undefined}
-            >
-              <Icon
-                className={cn(
-                  'w-5 h-5 shrink-0',
-                  isActive ? 'text-indigo-600' : 'text-gray-400',
-                )}
-              />
-              {!collapsed && <span>{item.label}</span>}
-              {isActive && !collapsed && (
-                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-600" />
-              )}
-            </Link>
-          );
-        })}
+            <div className="space-y-0.5">
+              {section.items.map((item) => {
+                const Icon = iconMap[item.icon] || LayoutDashboard;
+                const isActive =
+                  item.href === '/dashboard'
+                    ? pathname === '/dashboard'
+                    : pathname.startsWith(item.href);
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150',
+                      isActive
+                        ? 'bg-indigo-50 text-indigo-700 shadow-sm shadow-indigo-100'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                    )}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <Icon
+                      className={cn(
+                        'w-5 h-5 shrink-0',
+                        isActive ? 'text-indigo-600' : 'text-gray-400',
+                      )}
+                    />
+                    {!collapsed && <span>{item.label}</span>}
+                    {isActive && !collapsed && (
+                      <div className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* Collapse button */}
@@ -148,7 +172,7 @@ export function Sidebar() {
                   {user.firstName} {user.lastName}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
-                  {user.roles[0]?.displayName || user.roles[0]?.name}
+                  {user.roles[0]?.displayName || user.roles[0]?.name || 'User'}
                 </p>
               </div>
             )}

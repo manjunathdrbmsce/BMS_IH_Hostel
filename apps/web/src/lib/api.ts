@@ -111,6 +111,31 @@ class ApiClient {
   delete<T = unknown>(endpoint: string, options?: Omit<RequestOptions, 'method'>) {
     return this.request<T>(endpoint, { ...options, method: 'DELETE' });
   }
+
+  async upload<T = unknown>(endpoint: string, file: File, fieldName = 'file'): Promise<T> {
+    const formData = new FormData();
+    formData.append(fieldName, file);
+
+    const token = this.getToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(`${this.baseUrl}/api/v1${endpoint}`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new ApiError(data.message || 'Upload failed', res.status, data);
+    }
+
+    return data;
+  }
 }
 
 export class ApiError extends Error {

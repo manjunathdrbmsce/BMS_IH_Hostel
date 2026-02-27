@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   Logger,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -10,7 +11,7 @@ import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { LoginDto, RefreshTokenDto } from './dto';
+import { LoginDto, RefreshTokenDto, StudentSignupDto } from './dto';
 import { UserStatus } from '@prisma/client';
 
 interface JwtPayload {
@@ -103,8 +104,12 @@ export class AuthService {
     }
 
     // Generate tokens
-    const roles = user.userRoles.map((ur) => ur.role.name);
-    const tokens = await this.generateTokenPair(user.id, user.email, roles);
+    const roleNames = user.userRoles.map((ur) => ur.role.name);
+    const roles = user.userRoles.map((ur) => ({
+      name: ur.role.name,
+      displayName: ur.role.displayName,
+    }));
+    const tokens = await this.generateTokenPair(user.id, user.email, roleNames);
 
     // Store refresh token hash
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, this.SALT_ROUNDS);
@@ -302,7 +307,10 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    const roles = user.userRoles.map((ur) => ur.role.name);
+    const roles = user.userRoles.map((ur) => ({
+      name: ur.role.name,
+      displayName: ur.role.displayName,
+    }));
     const permissions = [
       ...new Set(
         user.userRoles.flatMap((ur) =>
@@ -360,6 +368,109 @@ export class AuthService {
           ),
         ),
       ],
+    };
+  }
+
+  /**
+   * Student self-registration. Creates a user with STUDENT role
+   * and status PENDING_VERIFICATION (admin must approve).
+   */
+  async signup(
+    dto: StudentSignupDto,
+    meta: { ipAddress?: string; userAgent?: string },
+  ) {
+    const email = dto.email.toLowerCase().trim();
+    const mobile = dto.mobile.trim();
+
+    // Check for duplicates
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { email },
+          { mobile },
+          ...(dto.usn ? [{ usn: dto.usn.trim() }] : []),
+        ],
+      },
+    });
+
+    if (existing) {
+      const field = existing.email === email ? 'email' : existing.mobile === mobile ? 'mobile' : 'USN';
+      throw new ConflictException(`An account with this ${field} already exists`);
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, this.SALT_ROUNDS);
+
+    // Find the STUDENT role
+    const studentRole = await this.prisma.role.findUnique({
+      where: { name: 'STUDENT' },
+    });
+
+    if (!studentRole) {
+      throw new Error('STUDENT role not configured in the system');
+    }
+
+    // Create user + assign STUDENT role in a transaction
+    const user = await this.prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          email,
+          mobile,
+          usn: dto.usn?.trim() || null,
+          passwordHash,
+          firstName: dto.firstName.trim(),
+          lastName: dto.lastName.trim(),
+          status: UserStatus.ACTIVE,
+        },
+      });
+
+      await tx.userRole.create({
+        data: {
+          userId: newUser.id,
+          roleId: studentRole.id,
+        },
+      });
+
+      return newUser;
+    });
+
+    // Audit
+    await this.auditService.log({
+      userId: user.id,
+      action: 'STUDENT_SIGNUP',
+      resource: 'auth',
+      details: { email, mobile, usn: dto.usn || null },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    this.logger.log(`Student signup: ${email} (${user.id})`);
+
+    // Auto-login: generate tokens so user can proceed immediately
+    const tokens = await this.generateTokenPair(user.id, user.email, ['STUDENT']);
+
+    const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, this.SALT_ROUNDS);
+    await this.prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: refreshTokenHash,
+        deviceInfo: meta.userAgent ?? null,
+        ipAddress: meta.ipAddress ?? null,
+        expiresAt: this.getRefreshTokenExpiry(),
+      },
+    });
+
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        mobile: user.mobile,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        roles: [{ name: 'STUDENT', displayName: 'Student' }],
+        status: user.status,
+      },
     };
   }
 

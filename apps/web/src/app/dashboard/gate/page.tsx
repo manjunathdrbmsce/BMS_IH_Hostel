@@ -9,29 +9,28 @@ import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/stat-card';
-import { Spinner } from '@/components/ui/spinner';
+import { Topbar } from '@/components/layout/topbar';
+import { Card } from '@/components/ui/card';
+import { StatCardSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
+import { useToast } from '@/components/ui/toast';
 import {
   ScanLine, Plus, Search, ArrowDownToLine, ArrowUpFromLine, Clock, AlertTriangle, ShieldCheck, Ticket,
 } from 'lucide-react';
 
 type TabType = 'entries' | 'passes';
 
-const entryTypeIcon: Record<string, React.ReactNode> = {
-  IN: <ArrowDownToLine className="h-5 w-5 text-green-500" />,
-  OUT: <ArrowUpFromLine className="h-5 w-5 text-orange-500" />,
-};
-
-const passStatusColor: Record<string, string> = {
-  ACTIVE: 'bg-green-100 text-green-800',
-  USED: 'bg-blue-100 text-blue-800',
-  EXPIRED: 'bg-gray-100 text-gray-800',
-  CANCELLED: 'bg-red-100 text-red-800',
+const passStatusBadge: Record<string, 'default' | 'success' | 'danger' | 'info'> = {
+  ACTIVE: 'success',
+  USED: 'info',
+  EXPIRED: 'default',
+  CANCELLED: 'danger',
 };
 
 export default function GatePage() {
   const { hasRole } = useAuth();
+  const { addToast } = useToast();
   const [tab, setTab] = useState<TabType>('entries');
   const [entries, setEntries] = useState<any[]>([]);
   const [passes, setPasses] = useState<any[]>([]);
@@ -70,7 +69,6 @@ export default function GatePage() {
         setPasses(res.data || []);
         setTotalPages(res.meta?.totalPages || 1);
       }
-
       if (canManage) {
         const statsRes = await api.get<any>('/gate/stats');
         setStats(statsRes.data);
@@ -80,7 +78,6 @@ export default function GatePage() {
   }, [tab, page, search, typeFilter, lateOnly, passStatus, canManage]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
   useEffect(() => { setPage(1); setSearch(''); }, [tab]);
 
   const handleCreateEntry = async () => {
@@ -92,7 +89,10 @@ export default function GatePage() {
       setShowCreateEntry(false);
       setEntryForm({ studentId: '', type: 'IN', gateNo: 'Gate-1', linkedLeaveId: '', notes: '' });
       fetchData();
-    } catch (e: any) { alert(e.message); }
+      addToast({ type: 'success', title: 'Gate entry logged' });
+    } catch (err: unknown) {
+      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to log entry' });
+    }
   };
 
   const handleCreatePass = async () => {
@@ -101,7 +101,10 @@ export default function GatePage() {
       setShowCreatePass(false);
       setPassForm({ studentId: '', purpose: '', visitorName: '', visitorPhone: '', validFrom: '', validTo: '' });
       fetchData();
-    } catch (e: any) { alert(e.message); }
+      addToast({ type: 'success', title: 'Gate pass issued' });
+    } catch (err: unknown) {
+      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to issue pass' });
+    }
   };
 
   const handleUpdatePass = async (id: string, status: string) => {
@@ -112,7 +115,10 @@ export default function GatePage() {
         const r = await api.get<any>(`/gate/passes/${id}`);
         setShowDetail({ ...r.data, _type: 'pass' });
       }
-    } catch (e: any) { alert(e.message); }
+      addToast({ type: 'success', title: `Pass ${status.toLowerCase()}` });
+    } catch (err: unknown) {
+      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to update pass' });
+    }
   };
 
   const viewEntryDetail = async (id: string) => {
@@ -125,127 +131,139 @@ export default function GatePage() {
     setShowDetail({ ...r.data, _type: 'pass' });
   };
 
-  const fmtDate = (d: string) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+  const fmtDate = (d: string) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '\u2014';
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gate Management</h1>
-          <p className="text-sm text-gray-500 mt-1">Entry/exit logs and gate passes</p>
-        </div>
+    <div className="min-h-screen">
+      <Topbar title="Gate Management" subtitle="Entry/exit logs and gate passes">
         <div className="flex gap-2">
           {canManage && <Button onClick={() => setShowCreateEntry(true)}><ScanLine className="h-4 w-4 mr-2" /> Log Entry</Button>}
           {canManage && <Button onClick={() => setShowCreatePass(true)} variant="outline"><Ticket className="h-4 w-4 mr-2" /> Gate Pass</Button>}
         </div>
-      </div>
+      </Topbar>
 
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          <StatCard title="Today In" value={stats.todayEntries} icon={<ArrowDownToLine className="h-5 w-5 text-green-600" />} />
-          <StatCard title="Today Out" value={stats.todayExits} icon={<ArrowUpFromLine className="h-5 w-5 text-orange-600" />} />
-          <StatCard title="Today Late" value={stats.todayLateEntries} icon={<AlertTriangle className="h-5 w-5 text-red-600" />} />
-          <StatCard title="Total Late" value={stats.totalLateEntries} icon={<Clock className="h-5 w-5 text-red-400" />} />
-          <StatCard title="Active Passes" value={stats.activePasses} icon={<Ticket className="h-5 w-5 text-blue-600" />} />
-          <StatCard title="Used Passes" value={stats.usedPasses} icon={<ShieldCheck className="h-5 w-5 text-gray-600" />} />
+      <div className="p-6 space-y-6 animate-in">
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          {loading && canManage ? (
+            Array.from({ length: 6 }).map((_, i) => <StatCardSkeleton key={i} />)
+          ) : stats ? (
+            <>
+              <StatCard title="Today In" value={stats.todayEntries} icon={ArrowDownToLine} iconColor="text-green-600" iconBg="bg-green-50" />
+              <StatCard title="Today Out" value={stats.todayExits} icon={ArrowUpFromLine} iconColor="text-orange-600" iconBg="bg-orange-50" />
+              <StatCard title="Today Late" value={stats.todayLateEntries} icon={AlertTriangle} iconColor="text-red-600" iconBg="bg-red-50" />
+              <StatCard title="Total Late" value={stats.totalLateEntries} icon={Clock} iconColor="text-red-400" iconBg="bg-red-50" />
+              <StatCard title="Active Passes" value={stats.activePasses} icon={Ticket} iconColor="text-blue-600" iconBg="bg-blue-50" />
+              <StatCard title="Used Passes" value={stats.usedPasses} icon={ShieldCheck} iconColor="text-gray-600" iconBg="bg-gray-50" />
+            </>
+          ) : null}
         </div>
-      )}
 
-      {/* Tabs */}
-      <div className="flex border-b">
-        <button onClick={() => setTab('entries')} className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === 'entries' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-          <ScanLine className="h-4 w-4 inline mr-1" /> Entry/Exit Log
-        </button>
-        <button onClick={() => setTab('passes')} className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === 'passes' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-          <Ticket className="h-4 w-4 inline mr-1" /> Gate Passes
-        </button>
-      </div>
+        {/* Tabs */}
+        <Card>
+          <div className="flex border-b -mx-6 -mt-6 px-6">
+            <button onClick={() => setTab('entries')} className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${tab === 'entries' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              <ScanLine className="h-4 w-4 inline mr-1.5" /> Entry/Exit Log
+            </button>
+            <button onClick={() => setTab('passes')} className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${tab === 'passes' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              <Ticket className="h-4 w-4 inline mr-1.5" /> Gate Passes
+            </button>
+          </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input placeholder="Search…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-10" />
-        </div>
-        {tab === 'entries' && (
-          <>
-            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
-              <option value="">All Types</option>
-              <option value="IN">In</option>
-              <option value="OUT">Out</option>
-            </select>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={lateOnly} onChange={(e) => { setLateOnly(e.target.checked); setPage(1); }} className="rounded" /> Late Only
-            </label>
-          </>
-        )}
-        {tab === 'passes' && (
-          <select value={passStatus} onChange={(e) => { setPassStatus(e.target.value); setPage(1); }} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
-            <option value="">All Statuses</option>
-            {GATE_PASS_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-        )}
-      </div>
+          {/* Filters */}
+          <div className="flex flex-wrap gap-3 mt-4">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input placeholder="Search\u2026" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-10" />
+            </div>
+            {tab === 'entries' && (
+              <>
+                <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none">
+                  <option value="">All Types</option>
+                  <option value="IN">In</option>
+                  <option value="OUT">Out</option>
+                </select>
+                <label className="flex items-center gap-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm cursor-pointer">
+                  <input type="checkbox" checked={lateOnly} onChange={(e) => { setLateOnly(e.target.checked); setPage(1); }} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-200" /> Late Only
+                </label>
+              </>
+            )}
+            {tab === 'passes' && (
+              <select value={passStatus} onChange={(e) => { setPassStatus(e.target.value); setPage(1); }} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none">
+                <option value="">All Statuses</option>
+                {GATE_PASS_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            )}
+          </div>
+        </Card>
 
-      {loading ? <Spinner /> : (
-        tab === 'entries' ? (
+        {/* List */}
+        {loading ? (
+          <Card><div className="space-y-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div></Card>
+        ) : tab === 'entries' ? (
           entries.length === 0 ? <EmptyState title="No entries" description="No gate entries found" /> : (
-            <div className="space-y-3">
-              {entries.map((e: any) => (
-                <div key={e.id} onClick={() => viewEntryDetail(e.id)} className="bg-white rounded-lg border p-4 hover:shadow-md transition-shadow cursor-pointer">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {entryTypeIcon[e.type]}
-                      <div>
-                        <p className="font-medium text-gray-900">{e.student?.firstName} {e.student?.lastName}</p>
-                        <p className="text-xs text-gray-500">{e.student?.usn || e.student?.email}</p>
+            <Card padding={false}>
+              <div className="divide-y divide-gray-100">
+                {entries.map((e: any) => (
+                  <div key={e.id} onClick={() => viewEntryDetail(e.id)} className="flex items-center justify-between gap-4 p-4 hover:bg-gray-50 transition-colors cursor-pointer">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${e.type === 'IN' ? 'bg-green-50' : 'bg-orange-50'}`}>
+                        {e.type === 'IN' ? <ArrowDownToLine className="h-4 w-4 text-green-500" /> : <ArrowUpFromLine className="h-4 w-4 text-orange-500" />}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{e.student?.firstName} {e.student?.lastName}</p>
+                        <p className="text-xs text-gray-500">{e.student?.usn || e.student?.email} \u2022 {fmtDate(e.timestamp)}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge className={e.type === 'IN' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}>{e.type}</Badge>
-                      {e.isLateEntry && <Badge className="bg-red-100 text-red-800">Late ({e.lateMinutes}m)</Badge>}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant={e.type === 'IN' ? 'success' : 'info'}>{e.type}</Badge>
+                      {e.isLateEntry && <Badge variant="danger">Late ({e.lateMinutes}m)</Badge>}
                       <span className="text-xs text-gray-400">{e.gateNo}</span>
                     </div>
                   </div>
-                  <div className="mt-1 text-xs text-gray-400">{fmtDate(e.timestamp)}{e.scannedBy && ` • by ${e.scannedBy.firstName} ${e.scannedBy.lastName}`}</div>
-                </div>
-              ))}
-              <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
-            </div>
+                ))}
+              </div>
+              <div className="p-4 border-t border-gray-100">
+                <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+              </div>
+            </Card>
           )
         ) : (
           passes.length === 0 ? <EmptyState title="No passes" description="No gate passes found" /> : (
-            <div className="space-y-3">
-              {passes.map((p: any) => (
-                <div key={p.id} onClick={() => viewPassDetail(p.id)} className="bg-white rounded-lg border p-4 hover:shadow-md transition-shadow cursor-pointer">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Ticket className="h-5 w-5 text-gray-400" />
-                      <div>
-                        <p className="font-medium text-gray-900">{p.student?.firstName} {p.student?.lastName}</p>
+            <Card padding={false}>
+              <div className="divide-y divide-gray-100">
+                {passes.map((p: any) => (
+                  <div key={p.id} onClick={() => viewPassDetail(p.id)} className="flex items-center justify-between gap-4 p-4 hover:bg-gray-50 transition-colors cursor-pointer">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                        <Ticket className="h-4 w-4 text-indigo-500" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{p.student?.firstName} {p.student?.lastName}</p>
                         <p className="text-xs text-gray-500">{p.purpose}</p>
                       </div>
                     </div>
-                    <Badge className={passStatusColor[p.status] || ''}>{GATE_PASS_STATUSES.find(s => s.value === p.status)?.label || p.status}</Badge>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant={passStatusBadge[p.status] || 'default'}>{GATE_PASS_STATUSES.find(s => s.value === p.status)?.label || p.status}</Badge>
+                      <span className="text-xs text-gray-400">{fmtDate(p.validFrom)} \u2192 {fmtDate(p.validTo)}</span>
+                    </div>
                   </div>
-                  <div className="mt-1 flex items-center gap-4 text-xs text-gray-400">
-                    <span>{fmtDate(p.validFrom)} → {fmtDate(p.validTo)}</span>
-                    {p.visitorName && <span>Visitor: {p.visitorName}</span>}
-                  </div>
-                </div>
-              ))}
-              <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
-            </div>
+                ))}
+              </div>
+              <div className="p-4 border-t border-gray-100">
+                <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+              </div>
+            </Card>
           )
-        )
-      )}
+        )}
+      </div>
 
       {/* Create Entry Modal */}
-      <Modal open={showCreateEntry} onClose={() => setShowCreateEntry(false)} title="Log Gate Entry/Exit">
+      <Modal open={showCreateEntry} onClose={() => setShowCreateEntry(false)} title="Log Gate Entry/Exit" size="lg">
         <div className="space-y-4">
           <Input placeholder="Student User ID" value={entryForm.studentId} onChange={(e) => setEntryForm({ ...entryForm, studentId: e.target.value })} />
           <div className="grid grid-cols-2 gap-3">
-            <select value={entryForm.type} onChange={(e) => setEntryForm({ ...entryForm, type: e.target.value })} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
+            <select value={entryForm.type} onChange={(e) => setEntryForm({ ...entryForm, type: e.target.value })} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
               <option value="IN">Entry (IN)</option>
               <option value="OUT">Exit (OUT)</option>
             </select>
@@ -258,7 +276,7 @@ export default function GatePage() {
       </Modal>
 
       {/* Create Pass Modal */}
-      <Modal open={showCreatePass} onClose={() => setShowCreatePass(false)} title="Issue Gate Pass">
+      <Modal open={showCreatePass} onClose={() => setShowCreatePass(false)} title="Issue Gate Pass" size="lg">
         <div className="space-y-4">
           <Input placeholder="Student User ID" value={passForm.studentId} onChange={(e) => setPassForm({ ...passForm, studentId: e.target.value })} />
           <Input placeholder="Purpose" value={passForm.purpose} onChange={(e) => setPassForm({ ...passForm, purpose: e.target.value })} />
@@ -275,13 +293,13 @@ export default function GatePage() {
       </Modal>
 
       {/* Detail Modal */}
-      <Modal open={!!showDetail} onClose={() => setShowDetail(null)} title={showDetail?._type === 'entry' ? 'Gate Entry Details' : 'Gate Pass Details'}>
+      <Modal open={!!showDetail} onClose={() => setShowDetail(null)} title={showDetail?._type === 'entry' ? 'Gate Entry Details' : 'Gate Pass Details'} size="lg">
         {showDetail && showDetail._type === 'entry' && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div><span className="text-gray-500">Student</span><p className="font-medium">{showDetail.student?.firstName} {showDetail.student?.lastName}</p></div>
-              <div><span className="text-gray-500">USN</span><p className="font-medium">{showDetail.student?.usn || '—'}</p></div>
-              <div><span className="text-gray-500">Type</span><p><Badge className={showDetail.type === 'IN' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}>{showDetail.type}</Badge></p></div>
+              <div><span className="text-gray-500">USN</span><p className="font-medium">{showDetail.student?.usn || '\u2014'}</p></div>
+              <div><span className="text-gray-500">Type</span><p><Badge variant={showDetail.type === 'IN' ? 'success' : 'info'}>{showDetail.type}</Badge></p></div>
               <div><span className="text-gray-500">Gate</span><p className="font-medium">{showDetail.gateNo}</p></div>
               <div><span className="text-gray-500">Timestamp</span><p className="font-medium">{fmtDate(showDetail.timestamp)}</p></div>
               <div><span className="text-gray-500">Late Entry</span><p className="font-medium">{showDetail.isLateEntry ? `Yes (${showDetail.lateMinutes} min)` : 'No'}</p></div>
@@ -302,29 +320,29 @@ export default function GatePage() {
                 <p className="font-medium text-red-800 mb-1">Violations ({showDetail.violations.length})</p>
                 {showDetail.violations.map((viol: any) => (
                   <div key={viol.id} className="text-red-700">
-                    {viol.type} — {viol.violatedByMinutes}m late • Escalation: {viol.escalationState}
+                    {viol.type} \u2014 {viol.violatedByMinutes}m late \u2022 Escalation: {viol.escalationState}
                   </div>
                 ))}
               </div>
             )}
-            {showDetail.notes && <div><span className="text-sm text-gray-500">Notes</span><p className="text-sm bg-gray-50 rounded p-2 mt-1">{showDetail.notes}</p></div>}
+            {showDetail.notes && <div><span className="text-sm text-gray-500">Notes</span><p className="text-sm bg-gray-50 rounded-lg p-2 mt-1">{showDetail.notes}</p></div>}
           </div>
         )}
         {showDetail && showDetail._type === 'pass' && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div><span className="text-gray-500">Student</span><p className="font-medium">{showDetail.student?.firstName} {showDetail.student?.lastName}</p></div>
-              <div><span className="text-gray-500">Status</span><p><Badge className={passStatusColor[showDetail.status]}>{GATE_PASS_STATUSES.find(s => s.value === showDetail.status)?.label}</Badge></p></div>
+              <div><span className="text-gray-500">Status</span><p><Badge variant={passStatusBadge[showDetail.status] || 'default'}>{GATE_PASS_STATUSES.find(s => s.value === showDetail.status)?.label}</Badge></p></div>
               <div><span className="text-gray-500">Purpose</span><p className="font-medium">{showDetail.purpose}</p></div>
-              <div><span className="text-gray-500">Valid</span><p className="font-medium text-xs">{fmtDate(showDetail.validFrom)} → {fmtDate(showDetail.validTo)}</p></div>
+              <div><span className="text-gray-500">Valid</span><p className="font-medium text-xs">{fmtDate(showDetail.validFrom)} \u2192 {fmtDate(showDetail.validTo)}</p></div>
               {showDetail.visitorName && <div><span className="text-gray-500">Visitor</span><p className="font-medium">{showDetail.visitorName}</p></div>}
               {showDetail.visitorPhone && <div><span className="text-gray-500">Visitor Phone</span><p className="font-medium">{showDetail.visitorPhone}</p></div>}
               {showDetail.approvedBy && <div><span className="text-gray-500">Approved By</span><p className="font-medium">{showDetail.approvedBy.firstName} {showDetail.approvedBy.lastName}</p></div>}
             </div>
             {canManage && showDetail.status === 'ACTIVE' && (
               <div className="flex gap-2 pt-2 border-t">
-                <Button onClick={() => handleUpdatePass(showDetail.id, 'USED')} className="flex-1 bg-blue-600 hover:bg-blue-700">Mark Used</Button>
-                <Button onClick={() => handleUpdatePass(showDetail.id, 'CANCELLED')} className="flex-1 bg-red-600 hover:bg-red-700">Cancel</Button>
+                <Button onClick={() => handleUpdatePass(showDetail.id, 'USED')} variant="primary" className="flex-1">Mark Used</Button>
+                <Button onClick={() => handleUpdatePass(showDetail.id, 'CANCELLED')} variant="danger" className="flex-1">Cancel</Button>
               </div>
             )}
           </div>

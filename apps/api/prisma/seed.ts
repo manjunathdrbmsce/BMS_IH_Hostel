@@ -3,7 +3,7 @@
 // Generates realistic data across all roles for manual testing
 // =============================================================================
 
-import { PrismaClient, UserStatus, BuildingStatus, BedStatus, AssignmentStatus, HostelStatus, RoomStatus, RoomType, LeaveType, LeaveStatus, ComplaintCategory, ComplaintPriority, ComplaintStatus, NoticePriority, NoticeScope, GateEntryType, GatePassStatus, ViolationType, EscalationState, NotificationState, NotificationChannel } from '@prisma/client';
+import { PrismaClient, UserStatus, BuildingStatus, BedStatus, AssignmentStatus, HostelStatus, RoomStatus, RoomType, LeaveType, LeaveStatus, ComplaintCategory, ComplaintPriority, ComplaintStatus, NoticePriority, NoticeScope, GateEntryType, GatePassStatus, ViolationType, EscalationState, NotificationState, NotificationChannel, RegistrationStatus, AdmissionMode, FeeType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -1078,7 +1078,20 @@ async function main() {
     'H.No. 112, Vidyanagar, Davanagere 577004',
     '#56, Railway Station Road, Tumkur 572101',
     'Flat 4B, Shanti Enclave, Udupi 576101, Karnataka',
+    'No. 18, Vidyanagar Main Road, Shimoga 577201, Karnataka',
+    'Door No. 5-3-78, Gandhi Nagar, Raichur 584101, Karnataka',
+    '#301, Saptagiri Residency, Chitradurga 577501, Karnataka',
+    'Near Bus Stand, Bellary Road, Hospet 583201, Karnataka',
   ];
+
+  // Realistic data pools for complete registration fields
+  const FATHER_OCCUPATIONS = ['Engineer', 'Doctor', 'Business Owner', 'Teacher', 'Government Service', 'Farmer', 'Advocate', 'Banker', 'Contractor', 'Retired Army', 'Professor', 'Chartered Accountant'];
+  const MOTHER_OCCUPATIONS = ['Homemaker', 'Teacher', 'Doctor', 'Business Owner', 'Engineer', 'Government Service', 'Nurse', 'Professor', 'Accountant', 'Social Worker'];
+  const MOTHER_TONGUES = ['Kannada', 'Telugu', 'Tamil', 'Hindi', 'Malayalam', 'Marathi', 'Tulu', 'Konkani', 'Urdu', 'Bengali'];
+  const RELIGIONS_LIST = ['Hindu', 'Muslim', 'Christian', 'Jain', 'Sikh', 'Buddhist'];
+  const CATEGORIES_LIST = ['General', 'OBC', 'SC', 'ST', '2A', '3A', '3B', 'GM'];
+  const ADMISSION_MODES_LIST = [AdmissionMode.CET, AdmissionMode.COMEDK, AdmissionMode.MANAGEMENT, AdmissionMode.NRI];
+  const LANDLINE_PREFIXES = ['080', '0821', '0824', '0836', '0831', '044', '040', '0820'];
 
   let profileCount = 0;
   const studentUserIds: string[] = []; // user IDs of students that got profiles
@@ -1095,6 +1108,11 @@ async function main() {
     const isMale = MALE_FIRST_NAMES.includes(s.firstName);
 
     try {
+      const fatherFirst = pick(MALE_FIRST_NAMES);
+      const motherFirst = pick(FEMALE_FIRST_NAMES);
+      const guardianFirst = pick(MALE_FIRST_NAMES);
+      const guardianLast = pick(LAST_NAMES);
+
       await prisma.studentProfile.upsert({
         where: { userId },
         update: {},
@@ -1110,7 +1128,38 @@ async function main() {
           admissionDate: new Date(2020 + (4 - academicYear), 7, randomInt(1, 30)),
           emergencyContact: randomMobile(),
           permanentAddress: pick(ADDRESSES),
-          medicalConditions: randomInt(1, 10) <= 2 ? pick(['Asthma', 'Diabetes Type 1', 'Peanut allergy', 'Spectacles - myopia']) : null,
+          medicalConditions: pick(['None', 'None', 'None', 'None', 'None', 'None', 'Asthma', 'Diabetes Type 1', 'Peanut allergy', 'Spectacles - myopia', 'Allergic rhinitis', 'Lactose intolerance']),
+          // Phase 6 — Complete registration fields
+          fatherName: `${fatherFirst} ${s.lastName}`,
+          motherName: `${motherFirst} ${s.lastName}`,
+          fatherOccupation: pick(FATHER_OCCUPATIONS),
+          motherOccupation: pick(MOTHER_OCCUPATIONS),
+          motherTongue: pick(MOTHER_TONGUES),
+          nationality: 'Indian',
+          religion: pick(RELIGIONS_LIST),
+          category: pick(CATEGORIES_LIST),
+          pucPercentage: parseFloat((randomInt(55, 99) + Math.random()).toFixed(2)),
+          admissionMode: pick(ADMISSION_MODES_LIST),
+          communicationAddress: pick(ADDRESSES),
+          fatherEmail: `${fatherFirst.toLowerCase()}.${s.lastName.toLowerCase()}@gmail.com`,
+          fatherMobile: randomMobile(),
+          fatherLandline: `${pick(LANDLINE_PREFIXES)}-${randomInt(2000000, 2999999)}`,
+          motherEmail: `${motherFirst.toLowerCase()}.${s.lastName.toLowerCase()}@gmail.com`,
+          motherMobile: randomMobile(),
+          motherLandline: `${pick(LANDLINE_PREFIXES)}-${randomInt(2000000, 2999999)}`,
+          localGuardianName: `${guardianFirst} ${guardianLast}`,
+          localGuardianAddress: pick(ADDRESSES),
+          localGuardianMobile: randomMobile(),
+          localGuardianLandline: `${pick(LANDLINE_PREFIXES)}-${randomInt(2000000, 2999999)}`,
+          localGuardianEmail: `${guardianFirst.toLowerCase()}.${guardianLast.toLowerCase()}@gmail.com`,
+          // Photo — every student has a profile photo
+          photoUrl: `/uploads/photos/student-${s.usn || userId}.jpg`,
+          // International students (NRI admission mode ~5%)
+          ...(randomInt(1, 20) === 1 ? {
+            passportNo: `P${String.fromCharCode(65 + randomInt(0, 25))}${randomInt(1000000, 9999999)}`,
+            visaDetails: `Student Visa - Valid till ${2026 + randomInt(0, 3)}-${String(randomInt(1, 12)).padStart(2, '0')}-${String(randomInt(1, 28)).padStart(2, '0')}; Visa No: IN-${randomInt(100000, 999999)}`,
+            residentialPermit: `FRRO Registration No: BLR-${randomInt(10000, 99999)}/${2025}; Valid till ${2026 + randomInt(0, 2)}-12-31`,
+          } : {}),
         },
       });
       profileCount++;
@@ -1746,7 +1795,176 @@ async function main() {
   console.log(`   ✓ ${gatePassCount} gate passes\n`);
 
   // =========================================================================
-  // 17. SUMMARY
+  // 17. HOSTEL REGISTRATIONS — All students get full registration records
+  // =========================================================================
+  console.log('📝 Seeding hostel registrations...');
+
+  let regCount = 0;
+  const regAcademicYear = '2025-2026';
+  const hostelIds = Object.values(hostelIdMap);
+
+  // Build registration entries from ALL active students with profiles
+  const regStudentEntries = studentUsers
+    .filter(s => s.status === UserStatus.ACTIVE && createdUserIds[s.email] && studentUserIds.includes(createdUserIds[s.email]))
+    .map((s, idx) => ({
+      userId: createdUserIds[s.email],
+      hostelCode: s.hostelCode || 'KH',
+      firstName: s.firstName,
+      lastName: s.lastName,
+      usn: s.usn,
+      email: s.email,
+      idx,
+    }));
+
+  console.log(`   Creating registrations for ${regStudentEntries.length} students...`);
+
+  for (let i = 0; i < regStudentEntries.length; i++) {
+    const entry = regStudentEntries[i];
+    const studentId = entry.userId;
+    const hostelId = hostelIdMap[entry.hostelCode] || pick(hostelIds);
+    const appNo = `IH-2025-${String(i + 1).padStart(4, '0')}`;
+
+    // Status distribution: 75% ALLOTTED, 8% APPROVED, 7% SUBMITTED, 4% UNDER_REVIEW, 2% DRAFT, rest mixed
+    let status: RegistrationStatus;
+    const pct = (i / regStudentEntries.length) * 100;
+    if (pct < 75) status = RegistrationStatus.ALLOTTED;
+    else if (pct < 83) status = RegistrationStatus.APPROVED;
+    else if (pct < 90) status = RegistrationStatus.SUBMITTED;
+    else if (pct < 94) status = RegistrationStatus.UNDER_REVIEW;
+    else if (pct < 96) status = RegistrationStatus.DRAFT;
+    else if (pct < 97) status = RegistrationStatus.DOCUMENTS_PENDING;
+    else if (pct < 98) status = RegistrationStatus.WAITLISTED;
+    else if (pct < 99) status = RegistrationStatus.REJECTED;
+    else status = RegistrationStatus.CANCELLED;
+
+    const isDraft = status === RegistrationStatus.DRAFT;
+    const isSubmitted = !isDraft;
+    const submittedAt = isSubmitted ? daysAgo(randomInt(10, 50)) : null;
+    const isReviewed = [
+      RegistrationStatus.APPROVED, RegistrationStatus.ALLOTTED,
+      RegistrationStatus.REJECTED, RegistrationStatus.DOCUMENTS_PENDING,
+      RegistrationStatus.WAITLISTED,
+    ].includes(status);
+    const now = new Date();
+
+    try {
+      const reg = await prisma.hostelRegistration.create({
+        data: {
+          applicationNo: appNo,
+          studentId,
+          academicYear: regAcademicYear,
+          hostelId,
+          status,
+          // Full student snapshot matching what submit service captures (profile + user)
+          studentSnapshot: {
+            user: {
+              firstName: entry.firstName,
+              lastName: entry.lastName,
+              email: entry.email,
+              mobile: randomMobile(),
+              usn: entry.usn,
+            },
+            dateOfBirth: new Date(2000 + randomInt(0, 5), randomInt(0, 11), randomInt(1, 28)).toISOString(),
+            gender: pick(['Male', 'Female']),
+            bloodGroup: pick(['A+', 'B+', 'O+', 'AB+', 'A-', 'B-', 'O-']),
+            department: pick(['Computer Science & Engineering', 'Information Science & Engineering', 'Electronics & Communication', 'Mechanical Engineering']),
+            course: pick(['B.E.', 'B.Tech']),
+            year: randomInt(1, 4),
+            semester: randomInt(1, 8),
+            fatherName: `${pick(MALE_FIRST_NAMES)} ${entry.lastName}`,
+            motherName: `${pick(FEMALE_FIRST_NAMES)} ${entry.lastName}`,
+            fatherMobile: randomMobile(),
+            motherMobile: randomMobile(),
+            permanentAddress: pick(ADDRESSES),
+            communicationAddress: pick(ADDRESSES),
+            photoUrl: `/uploads/photos/student-${entry.usn || studentId}.jpg`,
+          },
+          roomTypePreference: pick(['Single', 'Double', 'Triple']),
+          messType: pick(['VEG', 'NON_VEG']),
+          previousHostelHistory: randomInt(1, 3) === 1 ? pick([
+            'Stayed in Krishna Hostel during 1st year (2022-2023)',
+            'Resided in Ganga Hostel for 2 years (2022-2024)',
+            'First time applying for hostel accommodation',
+            'Stayed in private PG for 1st year, now applying for hostel',
+            'Transferred from Visvesvaraya Hostel — room sharing issue',
+          ]) : null,
+          // Declarations — with accepted flags, timestamps, AND uploaded document URLs
+          hosteliteDeclarationAccepted: isSubmitted,
+          hosteliteDeclarationAt: isSubmitted ? now : null,
+          hosteliteDeclarationDocUrl: isSubmitted ? `/uploads/documents/hostelite-declaration-${appNo}.pdf` : null,
+          antiRaggingStudentAccepted: isSubmitted,
+          antiRaggingStudentAt: isSubmitted ? now : null,
+          antiRaggingStudentDocUrl: isSubmitted ? `/uploads/documents/anti-ragging-student-${appNo}.pdf` : null,
+          antiRaggingParentAccepted: isSubmitted,
+          antiRaggingParentAt: isSubmitted ? now : null,
+          antiRaggingParentDocUrl: isSubmitted ? `/uploads/documents/anti-ragging-parent-${appNo}.pdf` : null,
+          hostelAgreementAccepted: isSubmitted,
+          hostelAgreementAt: isSubmitted ? now : null,
+          hostelAgreementDocUrl: isSubmitted ? `/uploads/documents/hostel-agreement-${appNo}.pdf` : null,
+          raggingPreventionAccepted: isSubmitted,
+          raggingPreventionAt: isSubmitted ? now : null,
+          raggingPreventionDocUrl: isSubmitted ? `/uploads/documents/ragging-prevention-${appNo}.pdf` : null,
+          submittedAt,
+          reviewedById: isReviewed ? adminId : null,
+          reviewedAt: isReviewed ? daysAgo(randomInt(2, 10)) : null,
+          reviewNotes: isReviewed ? pick(['Verified documents', 'All in order', 'Documents verified and approved', 'Profile verified, approved']) : null,
+          rejectionReason: status === RegistrationStatus.REJECTED ? pick(['Incomplete documents', 'Late submission', 'Hostel capacity full']) : null,
+          hostelIdNo: status === RegistrationStatus.ALLOTTED ? `BMS-H-${String(i + 1).padStart(3, '0')}` : null,
+          messRollNo: status === RegistrationStatus.ALLOTTED ? `MR-${String(i + 1).padStart(3, '0')}` : null,
+          dateOfOccupation: status === RegistrationStatus.ALLOTTED ? daysAgo(randomInt(5, 35)) : null,
+          completedAt: status === RegistrationStatus.ALLOTTED ? daysAgo(randomInt(3, 30)) : null,
+        },
+      });
+
+      // Add fees for allotted and approved registrations
+      if (status === RegistrationStatus.ALLOTTED || status === RegistrationStatus.APPROVED) {
+        const paidDate = daysAgo(randomInt(5, 30));
+        await prisma.registrationFee.createMany({
+          data: [
+            {
+              registrationId: reg.id,
+              feeType: FeeType.HOSTEL_FEE,
+              amount: pick([45000, 50000, 55000, 60000]),
+              receiptNo: `HR-${String(i + 1).padStart(4, '0')}`,
+              paidAt: paidDate,
+              recordedById: adminId,
+              notes: pick(['Paid via NEFT', 'Paid by DD', 'Online payment via college portal', 'Cash payment at accounts office']),
+            },
+            {
+              registrationId: reg.id,
+              feeType: FeeType.MESS_FEE,
+              amount: pick([25000, 30000, 35000]),
+              receiptNo: `MF-${String(i + 1).padStart(4, '0')}`,
+              paidAt: paidDate,
+              recordedById: adminId,
+              notes: pick(['Veg mess fee for full year', 'Non-veg mess fee for full year', 'Mess advance for Sem 1', 'Annual mess charges']),
+            },
+            {
+              registrationId: reg.id,
+              feeType: FeeType.CAUTION_DEPOSIT,
+              amount: 5000,
+              receiptNo: `CD-${String(i + 1).padStart(4, '0')}`,
+              paidAt: paidDate,
+              recordedById: adminId,
+              notes: 'Refundable caution deposit — returned on vacating hostel',
+            },
+          ],
+        });
+      }
+
+      regCount++;
+    } catch (e) {
+      // Skip duplicate or constraint errors
+    }
+
+    if (regCount % 50 === 0 && regCount > 0) {
+      console.log(`   ... ${regCount} registrations created`);
+    }
+  }
+  console.log(`   ✓ ${regCount} hostel registrations\n`);
+
+  // =========================================================================
+  // 18. SUMMARY
   // =========================================================================
   console.log('═══════════════════════════════════════════════════════');
   console.log('  ✅ SEED COMPLETED SUCCESSFULLY');
@@ -1779,6 +1997,7 @@ async function main() {
   console.log(`     Violations:          ${violationCount}`);
   console.log(`     Notifications:       ${notifCount}`);
   console.log(`     Gate Passes:         ${gatePassCount}`);
+  console.log(`     Registrations:       ${regCount}`);
   console.log();
   console.log('  🏨 Hostels Represented:');
   HOSTELS.forEach((h) => {

@@ -45,7 +45,7 @@ export class HostelsController {
   }
 
   @Get()
-  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN')
+  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT')
   @ApiOperation({ summary: 'List hostels with pagination' })
   @ApiResponse({ status: 200, description: 'Hostels list' })
   async findAll(@Query() query: ListHostelsQueryDto) {

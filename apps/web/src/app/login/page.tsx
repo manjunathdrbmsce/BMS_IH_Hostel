@@ -236,19 +236,22 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {/* Security Badge */}
-            <div className="flex items-center justify-center gap-2 mt-6 pt-6 border-t border-gray-100">
-              <Shield className="w-4 h-4 text-gray-400" />
-              <span className="text-xs text-gray-400">
-                Enterprise-grade security with JWT + RBAC
-              </span>
+            {/* Sign Up Link */}
+            <div className="flex items-center justify-center gap-1 mt-6 pt-6 border-t border-gray-100">
+              <span className="text-sm text-gray-500">New student?</span>
+              <a href="/signup" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+                Create an account
+              </a>
             </div>
           </div>
 
           {/* Bottom Info */}
-          <p className="text-center text-xs text-gray-400 mt-6">
-            Protected by rate limiting &amp; audit logging
-          </p>
+          <div className="flex items-center justify-center gap-2 mt-4">
+            <Shield className="w-4 h-4 text-gray-400" />
+            <span className="text-xs text-gray-400">
+              Protected by rate limiting &amp; audit logging
+            </span>
+          </div>
         </div>
       </div>
     </main>

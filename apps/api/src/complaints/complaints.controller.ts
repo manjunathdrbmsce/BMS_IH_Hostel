@@ -9,6 +9,7 @@ import {
   UseGuards,
   UseInterceptors,
   ParseUUIDPipe,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -47,7 +48,12 @@ export class ComplaintsController {
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'MAINTENANCE_STAFF', 'STUDENT')
   @ApiOperation({ summary: 'List complaints with filters' })
   @ApiResponse({ status: 200, description: 'Complaints list' })
-  async findAll(@Query() query: ListComplaintsQueryDto) {
+  async findAll(@Query() query: ListComplaintsQueryDto, @CurrentUser() user: any) {
+    // Students can only see their own complaints
+    const isStudent = user.roles?.includes('STUDENT');
+    if (isStudent) {
+      query.studentId = user.id;
+    }
     const result = await this.complaintsService.findMany(query);
     return { success: true, ...result };
   }
@@ -66,8 +72,13 @@ export class ComplaintsController {
   @ApiOperation({ summary: 'Get complaint by ID' })
   @ApiResponse({ status: 200, description: 'Complaint details' })
   @ApiResponse({ status: 404, description: 'Complaint not found' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     const complaint = await this.complaintsService.findById(id);
+    // Students can only view their own complaints
+    const isStudent = user.roles?.includes('STUDENT');
+    if (isStudent && complaint.studentId !== user.id) {
+      throw new NotFoundException('Complaint not found');
+    }
     return { success: true, data: complaint };
   }
 

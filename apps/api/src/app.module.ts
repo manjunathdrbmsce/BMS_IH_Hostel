@@ -19,6 +19,8 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { HealthModule } from './health/health.module';
 import { AuditModule } from './audit/audit.module';
+import { RegistrationModule } from './registration/registration.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
@@ -58,6 +60,8 @@ import { AuditModule } from './audit/audit.module';
     GateModule,
     ViolationsModule,
     NotificationsModule,
+    RegistrationModule,
+    UploadsModule,
     DashboardModule,
     HealthModule,
   ],

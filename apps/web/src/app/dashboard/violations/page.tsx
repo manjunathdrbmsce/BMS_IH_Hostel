@@ -9,28 +9,32 @@ import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Badge } from '@/components/ui/badge';
 import { StatCard } from '@/components/ui/stat-card';
-import { Spinner } from '@/components/ui/spinner';
+import { Topbar } from '@/components/layout/topbar';
+import { Card } from '@/components/ui/card';
+import { StatCardSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
+import { useToast } from '@/components/ui/toast';
 import {
   ShieldAlert, Search, AlertTriangle, CheckCircle, Clock, XOctagon, Scale,
 } from 'lucide-react';
 
-const typeIcon: Record<string, React.ReactNode> = {
-  LATE_ENTRY: <Clock className="h-5 w-5 text-red-500" />,
-  OVERSTAY: <XOctagon className="h-5 w-5 text-orange-500" />,
-  EARLY_EXIT: <AlertTriangle className="h-5 w-5 text-yellow-500" />,
+const typeIcon: Record<string, React.ElementType> = {
+  LATE_ENTRY: Clock,
+  OVERSTAY: XOctagon,
+  EARLY_EXIT: AlertTriangle,
 };
 
-const escalationColor: Record<string, string> = {
-  NONE: 'bg-gray-100 text-gray-800',
-  WARNED: 'bg-yellow-100 text-yellow-800',
-  ESCALATED: 'bg-red-100 text-red-800',
-  RESOLVED: 'bg-green-100 text-green-800',
+const escalationBadge: Record<string, 'default' | 'success' | 'danger' | 'info'> = {
+  NONE: 'default',
+  WARNED: 'info',
+  ESCALATED: 'danger',
+  RESOLVED: 'success',
 };
 
 export default function ViolationsPage() {
-  const { hasRole } = useAuth();
+  const { user, hasRole } = useAuth();
+  const { addToast } = useToast();
   const [violations, setViolations] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -42,6 +46,7 @@ export default function ViolationsPage() {
   const [showDetail, setShowDetail] = useState<any>(null);
   const [resolveNotes, setResolveNotes] = useState('');
 
+  const isStudent = hasRole('STUDENT');
   const canResolve = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN');
 
   const fetchData = useCallback(async () => {
@@ -51,19 +56,18 @@ export default function ViolationsPage() {
       if (search) params.set('search', search);
       if (typeFilter) params.set('type', typeFilter);
       if (escalationFilter) params.set('escalationState', escalationFilter);
-      const res = await api.get<any>(`/violations?${params}`);
+      // Students use /violations/my, admins use /violations
+      const endpoint = isStudent ? `/violations/my?${params}` : `/violations?${params}`;
+      const res = await api.get<any>(endpoint);
       setViolations(res.data || []);
       setTotalPages(res.meta?.totalPages || 1);
-
       if (canResolve) {
         const statsRes = await api.get<any>('/violations/stats');
         setStats(statsRes.data);
       }
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
     setLoading(false);
-  }, [page, search, typeFilter, escalationFilter, canResolve]);
+  }, [page, search, typeFilter, escalationFilter, canResolve, isStudent]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -71,7 +75,9 @@ export default function ViolationsPage() {
     try {
       const r = await api.get<any>(`/violations/${id}`);
       setShowDetail(r.data);
-    } catch (e: any) { alert(e.message); }
+    } catch (err: unknown) {
+      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to load details' });
+    }
   };
 
   const handleResolve = async () => {
@@ -82,96 +88,107 @@ export default function ViolationsPage() {
       const r = await api.get<any>(`/violations/${showDetail.id}`);
       setShowDetail(r.data);
       fetchData();
-    } catch (e: any) { alert(e.message); }
+      addToast({ type: 'success', title: 'Violation resolved' });
+    } catch (err: unknown) {
+      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to resolve' });
+    }
   };
 
   const fmtDate = (d: string) =>
-    d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+    d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '\u2014';
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Violations</h1>
-          <p className="text-sm text-gray-500 mt-1">Curfew violations, overstays, and escalations</p>
-        </div>
-      </div>
+    <div className="min-h-screen">
+      <Topbar title="Violations" subtitle={isStudent ? 'Your curfew violations and escalations' : 'Curfew violations, overstays, and escalations'} />
 
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <StatCard title="Today" value={stats.todayViolations} icon={<ShieldAlert className="h-5 w-5 text-red-600" />} />
-          <StatCard title="This Week" value={stats.weekViolations} icon={<AlertTriangle className="h-5 w-5 text-orange-600" />} />
-          <StatCard title="Open Escalations" value={stats.openEscalations} icon={<Scale className="h-5 w-5 text-red-400" />} />
-          <StatCard title="Resolved (Week)" value={stats.resolvedThisWeek} icon={<CheckCircle className="h-5 w-5 text-green-600" />} />
-          <StatCard title="Total" value={stats.totalViolations} icon={<XOctagon className="h-5 w-5 text-gray-600" />} />
+      <div className="p-6 space-y-6 animate-in">
+        {/* Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          {loading && canResolve ? (
+            Array.from({ length: 5 }).map((_, i) => <StatCardSkeleton key={i} />)
+          ) : stats ? (
+            <>
+              <StatCard title="Today" value={stats.todayViolations} icon={ShieldAlert} iconColor="text-red-600" iconBg="bg-red-50" />
+              <StatCard title="This Week" value={stats.weekViolations} icon={AlertTriangle} iconColor="text-orange-600" iconBg="bg-orange-50" />
+              <StatCard title="Open Escalations" value={stats.openEscalations} icon={Scale} iconColor="text-red-500" iconBg="bg-red-50" />
+              <StatCard title="Resolved (Week)" value={stats.resolvedThisWeek} icon={CheckCircle} iconColor="text-green-600" iconBg="bg-green-50" />
+              <StatCard title="Total" value={stats.totalViolations} icon={XOctagon} iconColor="text-gray-600" iconBg="bg-gray-50" />
+            </>
+          ) : null}
         </div>
-      )}
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input placeholder="Search student…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-10" />
-        </div>
-        <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
-          <option value="">All Types</option>
-          {VIOLATION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-        </select>
-        <select value={escalationFilter} onChange={(e) => { setEscalationFilter(e.target.value); setPage(1); }} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
-          <option value="">All States</option>
-          {ESCALATION_STATES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </select>
-      </div>
+        {/* Filters */}
+        <Card>
+          <div className="flex flex-wrap gap-3">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input placeholder="Search student\u2026" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="pl-10" />
+            </div>
+            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none">
+              <option value="">All Types</option>
+              {VIOLATION_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+            <select value={escalationFilter} onChange={(e) => { setEscalationFilter(e.target.value); setPage(1); }} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none">
+              <option value="">All States</option>
+              {ESCALATION_STATES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </div>
+        </Card>
 
-      {loading ? <Spinner /> : (
-        violations.length === 0 ? <EmptyState title="No violations" description="No violations found" /> : (
-          <div className="space-y-3">
-            {violations.map((v: any) => (
-              <div key={v.id} onClick={() => viewDetail(v.id)} className="bg-white rounded-lg border p-4 hover:shadow-md transition-shadow cursor-pointer">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {typeIcon[v.type] || <ShieldAlert className="h-5 w-5 text-gray-400" />}
-                    <div>
-                      <p className="font-medium text-gray-900">{v.student?.firstName} {v.student?.lastName}</p>
-                      <p className="text-xs text-gray-500">{v.student?.usn || v.student?.email}</p>
+        {/* List */}
+        {loading ? (
+          <Card><div className="space-y-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div></Card>
+        ) : violations.length === 0 ? (
+          <EmptyState title="No violations" description="No violations found matching your filters" />
+        ) : (
+          <Card padding={false}>
+            <div className="divide-y divide-gray-100">
+              {violations.map((v: any) => {
+                const TypeIcon = typeIcon[v.type] || ShieldAlert;
+                return (
+                  <div key={v.id} onClick={() => viewDetail(v.id)} className="flex items-center justify-between gap-4 p-4 hover:bg-gray-50 transition-colors cursor-pointer">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
+                        <TypeIcon className="h-4 w-4 text-red-500" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{v.student?.firstName} {v.student?.lastName}</p>
+                        <p className="text-xs text-gray-500">{v.student?.usn || v.student?.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant="danger">{VIOLATION_TYPES.find(t => t.value === v.type)?.label || v.type}</Badge>
+                      <Badge variant={escalationBadge[v.escalationState] || 'default'}>{ESCALATION_STATES.find(s => s.value === v.escalationState)?.label || v.escalationState}</Badge>
+                      <span className="text-sm font-medium text-red-600">{v.violatedByMinutes}m</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge className="bg-red-100 text-red-800">{VIOLATION_TYPES.find(t => t.value === v.type)?.label || v.type}</Badge>
-                    <Badge className={escalationColor[v.escalationState] || ''}>{ESCALATION_STATES.find(s => s.value === v.escalationState)?.label || v.escalationState}</Badge>
-                    <span className="text-sm font-medium text-red-600">{v.violatedByMinutes}m late</span>
-                  </div>
-                </div>
-                <div className="mt-1 text-xs text-gray-400">
-                  {fmtDate(v.createdAt)} • Gate: {v.gateEntry?.gateNo} • Repeated: {v.repeatedCountSnapshot}×
-                  {v.policySnapshot && ` • Curfew: ${v.policySnapshot.curfewTimeUsed}`}
-                </div>
-              </div>
-            ))}
-            <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
-          </div>
-        )
-      )}
+                );
+              })}
+            </div>
+            <div className="p-4 border-t border-gray-100">
+              <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+            </div>
+          </Card>
+        )}
+      </div>
 
       {/* Detail Modal */}
-      <Modal open={!!showDetail} onClose={() => setShowDetail(null)} title="Violation Details">
+      <Modal open={!!showDetail} onClose={() => setShowDetail(null)} title="Violation Details" size="lg">
         {showDetail && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div><span className="text-gray-500">Student</span><p className="font-medium">{showDetail.student?.firstName} {showDetail.student?.lastName}</p></div>
-              <div><span className="text-gray-500">USN</span><p className="font-medium">{showDetail.student?.usn || '—'}</p></div>
-              <div><span className="text-gray-500">Type</span><p><Badge className="bg-red-100 text-red-800">{VIOLATION_TYPES.find(t => t.value === showDetail.type)?.label || showDetail.type}</Badge></p></div>
-              <div><span className="text-gray-500">Escalation</span><p><Badge className={escalationColor[showDetail.escalationState]}>{ESCALATION_STATES.find(s => s.value === showDetail.escalationState)?.label}</Badge></p></div>
+              <div><span className="text-gray-500">USN</span><p className="font-medium">{showDetail.student?.usn || '\u2014'}</p></div>
+              <div><span className="text-gray-500">Type</span><p><Badge variant="danger">{VIOLATION_TYPES.find(t => t.value === showDetail.type)?.label || showDetail.type}</Badge></p></div>
+              <div><span className="text-gray-500">Escalation</span><p><Badge variant={escalationBadge[showDetail.escalationState] || 'default'}>{ESCALATION_STATES.find(s => s.value === showDetail.escalationState)?.label}</Badge></p></div>
               <div><span className="text-gray-500">Late By</span><p className="font-medium text-red-600">{showDetail.violatedByMinutes} minutes</p></div>
-              <div><span className="text-gray-500">Repeated Count</span><p className="font-medium">{showDetail.repeatedCountSnapshot}×</p></div>
+              <div><span className="text-gray-500">Repeated Count</span><p className="font-medium">{showDetail.repeatedCountSnapshot}\u00d7</p></div>
               <div><span className="text-gray-500">Expected Time</span><p className="font-medium">{fmtDate(showDetail.requestedOrApprovedTime)}</p></div>
               <div><span className="text-gray-500">Actual Time</span><p className="font-medium">{fmtDate(showDetail.actualTime)}</p></div>
               <div><span className="text-gray-500">Gate</span><p className="font-medium">{showDetail.gateEntry?.gateNo} ({showDetail.gateEntry?.type})</p></div>
               <div><span className="text-gray-500">Created</span><p className="font-medium">{fmtDate(showDetail.createdAt)}</p></div>
             </div>
-
-            <div><span className="text-sm text-gray-500">Reason</span><p className="text-sm bg-gray-50 rounded p-2 mt-1">{showDetail.reason}</p></div>
-
+            <div><span className="text-sm text-gray-500">Reason</span><p className="text-sm bg-gray-50 rounded-lg p-3 mt-1">{showDetail.reason}</p></div>
             {showDetail.policySnapshot && (
               <div className="bg-blue-50 rounded-lg p-3 text-sm">
                 <p className="font-medium text-blue-800 mb-1">Policy Snapshot (v{showDetail.policySnapshot.policyVersion})</p>
@@ -182,7 +199,6 @@ export default function ViolationsPage() {
                 </div>
               </div>
             )}
-
             {showDetail.resolvedAt && (
               <div className="bg-green-50 rounded-lg p-3 text-sm">
                 <p className="font-medium text-green-800">Resolved on {fmtDate(showDetail.resolvedAt)}</p>
@@ -190,18 +206,16 @@ export default function ViolationsPage() {
                 {showDetail.resolvedNotes && <p className="text-green-700 mt-1">{showDetail.resolvedNotes}</p>}
               </div>
             )}
-
             {showDetail.notifications?.length > 0 && (
               <div>
                 <p className="text-sm text-gray-500 mb-1">Notifications ({showDetail.notifications.length})</p>
                 {showDetail.notifications.map((n: any) => (
-                  <div key={n.id} className="text-xs bg-gray-50 rounded p-2 mb-1">
-                    <span className="font-medium">{n.title}</span> • {n.channel} • {n.state}
+                  <div key={n.id} className="text-xs bg-gray-50 rounded-lg p-2 mb-1">
+                    <span className="font-medium">{n.title}</span> \u2022 {n.channel} \u2022 {n.state}
                   </div>
                 ))}
               </div>
             )}
-
             {canResolve && showDetail.escalationState !== 'RESOLVED' && (
               <div className="border-t pt-3 space-y-2">
                 <Input placeholder="Resolution notes (optional)" value={resolveNotes} onChange={(e) => setResolveNotes(e.target.value)} />

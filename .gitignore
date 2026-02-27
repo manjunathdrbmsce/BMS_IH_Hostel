@@ -46,3 +46,6 @@ docker-data/
 
 # Misc
 *.tsbuildinfo
+
+# Uploads (user-generated content)
+apps/api/uploads/
