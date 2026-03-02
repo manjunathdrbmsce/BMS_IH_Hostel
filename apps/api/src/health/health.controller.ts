@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   @Get()
   @ApiOperation({ summary: 'Health check' })
@@ -18,7 +18,7 @@ export class HealthController {
       data: {
         status: dbHealthy ? 'healthy' : 'degraded',
         timestamp: new Date().toISOString(),
-        version: '0.1.0',
+        version: '0.2.0',
         services: {
           database: dbHealthy ? 'up' : 'down',
         },

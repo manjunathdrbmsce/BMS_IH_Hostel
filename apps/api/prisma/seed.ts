@@ -1745,7 +1745,7 @@ async function main() {
             .replace('{count}', String(randomInt(2, 5)))
             .replace('{id}', String(randomInt(1000, 9999)))
             .replace('{title}', pick(['Hostel Day Celebration', 'Exam Timetable Update', 'Water Supply Disruption'])),
-          state: isRead ? NotificationState.READ : NotificationState.SENT,
+          state: isRead ? NotificationState.SENT : NotificationState.SENT,
           readAt: isRead ? daysAgo(randomInt(0, dBack)) : null,
           sentAt: notifTime,
           violationId,
@@ -1840,11 +1840,11 @@ async function main() {
     const isDraft = status === RegistrationStatus.DRAFT;
     const isSubmitted = !isDraft;
     const submittedAt = isSubmitted ? daysAgo(randomInt(10, 50)) : null;
-    const isReviewed = [
+    const isReviewed = ([
       RegistrationStatus.APPROVED, RegistrationStatus.ALLOTTED,
       RegistrationStatus.REJECTED, RegistrationStatus.DOCUMENTS_PENDING,
       RegistrationStatus.WAITLISTED,
-    ].includes(status);
+    ] as RegistrationStatus[]).includes(status);
     const now = new Date();
 
     try {

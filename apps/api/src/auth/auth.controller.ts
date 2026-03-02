@@ -18,7 +18,7 @@ import {
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
-import { LoginDto, RefreshTokenDto, StudentSignupDto } from './dto';
+import { LoginDto, RefreshTokenDto, StudentSignupDto, ForgotPasswordDto, ResetPasswordDto } from './dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuditInterceptor } from '../audit/audit.interceptor';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -27,7 +27,7 @@ import { CurrentUser } from './decorators/current-user.decorator';
 @Controller('auth')
 @UseInterceptors(AuditInterceptor)
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -104,6 +104,43 @@ export class AuthController {
     return {
       success: true,
       message: 'Logged out successfully',
+    };
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 3 } }) // 3 attempts per minute
+  @ApiOperation({ summary: 'Request a password reset token' })
+  @ApiResponse({ status: 200, description: 'Reset instructions sent (if email exists)' })
+  @ApiResponse({ status: 429, description: 'Too many attempts' })
+  async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
+    const result = await this.authService.forgotPassword(dto, {
+      ipAddress: this.getClientIp(req),
+      userAgent: req.headers['user-agent'],
+    });
+
+    return {
+      success: true,
+      data: result,
+    };
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @ApiOperation({ summary: 'Reset password using a valid reset token' })
+  @ApiResponse({ status: 200, description: 'Password reset successful' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
+  @ApiResponse({ status: 429, description: 'Too many attempts' })
+  async resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
+    const result = await this.authService.resetPassword(dto, {
+      ipAddress: this.getClientIp(req),
+      userAgent: req.headers['user-agent'],
+    });
+
+    return {
+      success: true,
+      data: result,
     };
   }
 

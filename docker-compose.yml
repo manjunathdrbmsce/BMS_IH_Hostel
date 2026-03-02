@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: bms_postgres
+    container_name: bms_postgres1
     restart: unless-stopped
     ports:
       - '${DB_PORT:-5432}:5432'
@@ -19,7 +19,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: bms_redis
+    container_name: bms_redis1
     restart: unless-stopped
     ports:
       - '${REDIS_PORT:-6379}:6379'

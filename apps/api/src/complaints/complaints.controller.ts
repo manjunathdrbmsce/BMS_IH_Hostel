@@ -25,6 +25,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { AuditInterceptor } from '../audit/audit.interceptor';
 import { AuditAction } from '../audit/audit.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { hasRole } from '../auth/helpers';
 
 @ApiTags('complaints')
 @Controller('complaints')
@@ -32,7 +33,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 @UseInterceptors(AuditInterceptor)
 @ApiBearerAuth('access-token')
 export class ComplaintsController {
-  constructor(private readonly complaintsService: ComplaintsService) {}
+  constructor(private readonly complaintsService: ComplaintsService) { }
 
   @Post()
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT')
@@ -50,7 +51,7 @@ export class ComplaintsController {
   @ApiResponse({ status: 200, description: 'Complaints list' })
   async findAll(@Query() query: ListComplaintsQueryDto, @CurrentUser() user: any) {
     // Students can only see their own complaints
-    const isStudent = user.roles?.includes('STUDENT');
+    const isStudent = hasRole(user, 'STUDENT');
     if (isStudent) {
       query.studentId = user.id;
     }
@@ -75,7 +76,7 @@ export class ComplaintsController {
   async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     const complaint = await this.complaintsService.findById(id);
     // Students can only view their own complaints
-    const isStudent = user.roles?.includes('STUDENT');
+    const isStudent = hasRole(user, 'STUDENT');
     if (isStudent && complaint.studentId !== user.id) {
       throw new NotFoundException('Complaint not found');
     }

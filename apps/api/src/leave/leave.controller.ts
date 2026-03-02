@@ -24,6 +24,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { AuditInterceptor } from '../audit/audit.interceptor';
 import { AuditAction } from '../audit/audit.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { hasRole } from '../auth/helpers';
 
 @ApiTags('leave')
 @Controller('leave')
@@ -31,7 +32,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 @UseInterceptors(AuditInterceptor)
 @ApiBearerAuth('access-token')
 export class LeaveController {
-  constructor(private readonly leaveService: LeaveService) {}
+  constructor(private readonly leaveService: LeaveService) { }
 
   @Post()
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT')
@@ -43,14 +44,24 @@ export class LeaveController {
     return { success: true, data: leave };
   }
 
+  @Get('eligibility')
+  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT')
+  @ApiOperation({ summary: 'Check leave eligibility for current student' })
+  @ApiResponse({ status: 200, description: 'Eligibility check result with hostel, guardian, and room info' })
+  async checkEligibility(@CurrentUser() user: any) {
+    const studentId = user.id;
+    const result = await this.leaveService.checkEligibility(studentId);
+    return { success: true, data: result };
+  }
+
   @Get()
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT', 'PARENT')
   @ApiOperation({ summary: 'List leave requests with filters' })
   @ApiResponse({ status: 200, description: 'Leave requests list' })
   async findAll(@Query() query: ListLeaveQueryDto, @CurrentUser() user: any) {
     // Students & parents can only see their own leave requests
-    const isStudent = user.roles?.includes('STUDENT');
-    const isParent = user.roles?.includes('PARENT');
+    const isStudent = hasRole(user, 'STUDENT');
+    const isParent = hasRole(user, 'PARENT');
     if (isStudent || isParent) {
       query.studentId = user.id;
     }
@@ -75,8 +86,8 @@ export class LeaveController {
   async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     const leave = await this.leaveService.findById(id);
     // Students & parents can only view their own leave requests
-    const isStudent = user.roles?.includes('STUDENT');
-    const isParent = user.roles?.includes('PARENT');
+    const isStudent = hasRole(user, 'STUDENT');
+    const isParent = hasRole(user, 'PARENT');
     if ((isStudent || isParent) && leave.studentId !== user.id) {
       throw new NotFoundException('Leave request not found');
     }
@@ -84,7 +95,7 @@ export class LeaveController {
   }
 
   @Post(':id/parent-approve')
-  @Roles('SUPER_ADMIN', 'PARENT')
+  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'PARENT')
   @AuditAction('LEAVE_PARENT_APPROVE', 'leave')
   @ApiOperation({ summary: 'Parent approves a leave request' })
   @ApiResponse({ status: 200, description: 'Leave request approved by parent' })
@@ -93,6 +104,19 @@ export class LeaveController {
     @CurrentUser() user: any,
   ) {
     const leave = await this.leaveService.parentApprove(id, user.id);
+    return { success: true, data: leave };
+  }
+
+  @Post(':id/parent-reject')
+  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'PARENT')
+  @AuditAction('LEAVE_PARENT_REJECT', 'leave')
+  @ApiOperation({ summary: 'Parent rejects a leave request' })
+  @ApiResponse({ status: 200, description: 'Leave request rejected by parent' })
+  async parentReject(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    const leave = await this.leaveService.parentReject(id, user.id);
     return { success: true, data: leave };
   }
 

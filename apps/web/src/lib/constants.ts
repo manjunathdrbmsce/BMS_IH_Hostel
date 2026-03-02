@@ -265,6 +265,7 @@ export const LEAVE_TYPES = [
 export const LEAVE_STATUSES = [
   { value: 'PENDING', label: 'Pending' },
   { value: 'PARENT_APPROVED', label: 'Parent Approved' },
+  { value: 'PARENT_REJECTED', label: 'Parent Rejected' },
   { value: 'WARDEN_APPROVED', label: 'Approved' },
   { value: 'REJECTED', label: 'Rejected' },
   { value: 'CANCELLED', label: 'Cancelled' },
@@ -333,6 +334,7 @@ export const NOTIFICATION_CHANNELS = [
   { value: 'EMAIL', label: 'Email' },
   { value: 'SMS', label: 'SMS' },
   { value: 'PUSH', label: 'Push' },
+  { value: 'WHATSAPP', label: 'WhatsApp' },
 ] as const;
 
 export const NOTIFICATION_STATES = [

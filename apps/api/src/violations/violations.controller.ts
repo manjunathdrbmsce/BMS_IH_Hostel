@@ -24,6 +24,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { AuditInterceptor } from '../audit/audit.interceptor';
 import { AuditAction } from '../audit/audit.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { hasRole } from '../auth/helpers';
 
 @ApiTags('violations')
 @Controller('violations')
@@ -31,7 +32,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 @UseInterceptors(AuditInterceptor)
 @ApiBearerAuth('access-token')
 export class ViolationsController {
-  constructor(private readonly violationsService: ViolationsService) {}
+  constructor(private readonly violationsService: ViolationsService) { }
 
   @Get()
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN')
@@ -76,7 +77,7 @@ export class ViolationsController {
     @CurrentUser() user: any,
   ) {
     // Students can only view their own violations
-    const isStudent = user.roles?.includes('STUDENT');
+    const isStudent = hasRole(user, 'STUDENT');
     if (isStudent && studentId !== user.id) {
       throw new NotFoundException('Violations not found');
     }
@@ -94,7 +95,7 @@ export class ViolationsController {
   async findById(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     const violation = await this.violationsService.findById(id);
     // Students can only view their own violations
-    const isStudent = user.roles?.includes('STUDENT');
+    const isStudent = hasRole(user, 'STUDENT');
     if (isStudent && violation.studentId !== user.id) {
       throw new NotFoundException('Violation not found');
     }

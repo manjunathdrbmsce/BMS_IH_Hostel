@@ -10,6 +10,7 @@ import {
   UseInterceptors,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
   ApiOperation,
@@ -39,7 +40,7 @@ import { AuditAction } from '../audit/audit.decorator';
 @UseInterceptors(AuditInterceptor)
 @ApiBearerAuth('access-token')
 export class RegistrationController {
-  constructor(private readonly registrationService: RegistrationService) {}
+  constructor(private readonly registrationService: RegistrationService) { }
 
   // =========================================================================
   // Student Endpoints
@@ -76,6 +77,7 @@ export class RegistrationController {
 
   @Post(':id/submit')
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'STUDENT')
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @AuditAction('REGISTRATION_SUBMIT', 'registration')
   @ApiOperation({ summary: 'Submit a completed registration' })
   @ApiResponse({ status: 200, description: 'Registration submitted' })
@@ -155,6 +157,7 @@ export class RegistrationController {
 
   @Post(':id/review')
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN')
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @AuditAction('REGISTRATION_REVIEW', 'registration')
   @ApiOperation({ summary: 'Review a submitted registration (approve/reject)' })
   @ApiResponse({ status: 200, description: 'Registration reviewed' })

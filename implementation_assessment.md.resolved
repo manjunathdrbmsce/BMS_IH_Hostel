@@ -1,0 +1,697 @@
+# BMS Hostel Platform — Current Implementation Assessment Report
+
+> **Generated:** 2026-03-01 | **Scope:** Full repo (`d:\Apps\hostel\BMS_hostel`) end-to-end
+> **Analyst:** Antigravity (no code was modified)
+
+---
+
+## 1. Executive Summary
+
+The BMS Hostel Platform is a Turborepo monorepo containing a **NestJS REST API** (modular monolith), a **Next.js 14 admin portal** (App Router), and an **Expo React Native mobile app**. It is designed for Indian college hostel management — covering registration, room allotment, gate management, leave, complaints, notices, violations, and fees.
+
+**What is solidly implemented (production-ready API layer):**
+- Full JWT auth with refresh-token rotation and reuse detection (`apps/api/src/auth`)
+- 11-role RBAC via `JwtAuthGuard` + `RolesGuard` + `PermissionsGuard` applied to all protected routes
+- 19 backend modules are wired and importable; all controllers have real service calls backed by Prisma
+- Prisma schema is fully designed across 6 phases — 20 models, all migrated
+- Comprehensive audit logging via `AuditInterceptor` on every mutating endpoint
+- Dashboard stats endpoint pulling live data across all modules
+
+**What is stub/partial:**
+- The **web UI** (`apps/web`) has a full dashboard shell with 16 sub-sections, but the `dashboard/page.tsx` is a large single-file implementation — it needs verification whether all 16 sections hit the API or use mock data
+- The **mobile app** (`apps/mobile`) has only 3 screens: `_layout.tsx`, `index.tsx`, `login.tsx` — it is a placeholder shell
+- **Notifications are stored in DB** but no email/SMS/push delivery is implemented (channels: EMAIL, SMS, PUSH all in schema but no transport wired)
+- **Payment integration** (Razorpay) is commented out in `.env.example` — not implemented
+- **File uploads** use local `diskStorage` (`uploads/` folder on disk), not S3-compatible cloud storage
+- **Redis is provisioned** (docker-compose.yml) but **not consumed** — no BullMQ queues, no caching in Phase 1
+
+**Critical security observation:**
+- File upload endpoint (`POST /api/v1/uploads/photo`) does **not configure a file filter** for photos — only the document endpoint has a `fileFilter`. A non-image file can be uploaded as a photo.
+
+---
+
+## 2. Repo Overview
+
+### Stack
+
+| Layer | Technology | Version / Notes |
+|---|---|---|
+| Runtime | Node.js | ≥ 20 LTS |
+| Monorepo | Turborepo + pnpm | pnpm workspaces |
+| Backend | NestJS | Modular monolith, REST |
+| ORM | Prisma | PostgreSQL 16 |
+| Cache/Queue | Redis + BullMQ | Redis provisioned, BullMQ not yet used |
+| Web Frontend | Next.js | App Router (14.x) |
+| Mobile | Expo + React Native | Shell only |
+| Validation | class-validator + class-transformer | Whitelist mode globally |
+| Auth | JWT (HS256) + Passport | Access 15m, Refresh 7d |
+| API Docs | Swagger / OpenAPI | `http://localhost:3001/api/docs` |
+| CI | GitHub Actions | `.github/` present |
+
+### Entry Points
+
+| App | Start Command | URL |
+|---|---|---|
+| API | `pnpm --filter api dev` | http://localhost:3001/api/v1 |
+| Swagger | — | http://localhost:3001/api/docs |
+| Web | `pnpm --filter web dev` | http://localhost:3000 |
+| Mobile | `pnpm --filter mobile dev` | Expo Go / Metro |
+| DB Studio | `pnpm db:studio` | Prisma Studio GUI |
+
+### Key Config Files
+
+| File | Purpose |
+|---|---|
+| `turbo.json` | Turborepo pipeline (dev, build, test, lint) |
+| `pnpm-workspace.yaml` | Workspace = `apps/*`, `packages/*` |
+| `docker-compose.yml` | PostgreSQL 5432, Redis 6379 |
+| `.env.example` (root + `apps/api`) | All env var keys documented |
+| `apps/api/prisma/schema.prisma` | 1053-line schema, single source of DB truth |
+| `apps/api/src/main.ts` | Global prefix `/api/v1`, Helmet, CORS, ValidationPipe, Swagger |
+| `apps/api/src/app.module.ts` | 19 modules registered |
+
+### How to Run Locally
+
+```bash
+pnpm install
+cp .env.example .env        # set JWT_SECRET (min 32 chars)
+pnpm docker:up              # starts Postgres + Redis
+pnpm db:generate && pnpm db:migrate && pnpm db:seed
+pnpm --filter api dev       # API on :3001
+pnpm --filter web dev       # Web on :3000
+```
+
+Default super-admin: `admin@bms.local` / `Admin@123456`
+
+> [!CAUTION]
+> The seed credentials are **hardcoded in `.env.example`** (line 56: `SEED_ADMIN_PASSWORD=Admin@123456`). This is a dev convenience but must not reach production.
+
+---
+
+## 3. Architecture & Data Flow
+
+```
+┌─────────────────── Client Applications ─────────────────────────────┐
+│  Next.js (apps/web)       Expo Mobile (apps/mobile)                  │
+│  Admin Portal - :3000     Student App (shell only)                   │
+└───────────────┬──────────────────────┬──────────────────────────────┘
+                │  HTTPS REST          │  HTTPS REST
+                ▼                      ▼
+┌─────────── API Gateway (apps/api/src/main.ts) ──────────────────────┐
+│  Helmet (CSP, HSTS)     CORS (origin: FRONTEND_URL only)            │
+│  ThrottlerGuard (10/s short, 30/min medium — global)                │
+│  Global Prefix: /api/v1   Swagger: /api/docs                        │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │
+┌─────────── NestJS Application (app.module.ts) ──────────────────────┐
+│                                                                      │
+│  auth       users      hostels    buildings   policies   students    │
+│  allotments leave      complaints notices     gate       violations  │
+│  notifications  registration  uploads  dashboard  audit   health     │
+│                                                                      │
+│  Cross-cutting: JwtAuthGuard → RolesGuard → AuditInterceptor        │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │  Prisma ORM
+        ┌──────────────────┼─────────────────┐
+        ▼                  ▼                 ▼
+   PostgreSQL:5432     Redis:6379         uploads/
+   (20 models)         (provisioned,      (local disk,
+   Migrations done     not consumed)      no S3 yet)
+```
+
+### Critical Auth Flow
+
+```
+POST /auth/login (5/min throttle)
+  → AuthService.login()
+  → find user by email|mobile|usn
+  → bcrypt.compare(password, hash)
+  → sign accessToken (15m) + refreshToken (7d)
+  → store hash(refreshToken) in RefreshToken table
+
+POST /auth/refresh (10/min throttle)
+  → validate refreshToken hash in DB
+  → reuse detection: if already revoked → revoke ALL user tokens
+  → issue new pair (rotation)
+
+GET /auth/me (JwtAuthGuard)
+  → decode JWT → load user + roles + permissions
+
+POST /auth/logout (JwtAuthGuard)
+  → revokedAt = now() on ALL user refresh tokens
+```
+
+---
+
+## 4. Feature Inventory
+
+### 4.1 API Modules (grouped by domain)
+
+#### Authentication & Identity
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| Login (email/mobile/USN) | `POST /auth/login` | ✅ Implemented | `auth.controller.ts:40`, `auth.service.ts` |
+| Student self-signup | `POST /auth/signup` | ✅ Implemented | `auth.controller.ts:58` |
+| JWT refresh w/ rotation | `POST /auth/refresh` | ✅ Implemented | `auth.service.ts` → `RefreshToken` model |
+| Logout (revoke all tokens) | `POST /auth/logout` | ✅ Implemented | `auth.controller.ts:95` |
+| Get own profile + roles | `GET /auth/me` | ✅ Implemented | `auth.controller.ts:117` |
+| MFA / OTP | — | ❌ Not present | `assumptions.md:16` deferred to Phase 2 |
+| Session management UI | — | ❌ Not present | deferred to Phase 2 |
+
+#### User Management
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| Create user | `POST /users` | ✅ Implemented | `users.controller.ts:37` |
+| List users (paginated) | `GET /users` | ✅ Implemented | `users.controller.ts:51` |
+| Get user by ID | `GET /users/:id` | ✅ Implemented | `users.controller.ts:60` |
+| Update user | `PATCH /users/:id` | ✅ Implemented | `users.controller.ts:70` |
+| Soft-delete user | `DELETE /users/:id` | ✅ Implemented | `users.controller.ts:83` |
+| Role assign/revoke API | — | ⚠️ Partial | Seed sets roles; no `/users/:id/roles` endpoint exists |
+| Password reset / forgot | — | ❌ Not present | No endpoint found anywhere |
+
+#### Hostel & Room Management
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| CRUD Hostels | `POST/GET/PATCH/DELETE /hostels` | ✅ Implemented | `hostels.controller.ts` |
+| Hostel stats | `GET /hostels/stats` | ✅ Implemented | `hostels.controller.ts:56` |
+| CRUD Rooms | `POST/GET/PATCH/DELETE /rooms` | ✅ Implemented | `rooms.controller.ts` |
+| Bulk create rooms | `POST /rooms/bulk` | ✅ Implemented | `rooms.controller.ts:51` |
+| CRUD Buildings | `POST/GET/PATCH/DELETE /buildings` | ✅ Implemented | `buildings.controller.ts` |
+| Mess Management | — | ❌ Not present | No `mess` module in `app.module.ts` or `src/` |
+
+#### Student Management
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| Create/update student profile | `POST/PATCH /students/profiles` | ✅ Implemented | `students.controller.ts:46,76` |
+| List/view student profiles | `GET /students/profiles` | ✅ Implemented | `students.controller.ts:57,66` |
+| Guardian link CRUD | `POST/GET/PATCH/DELETE /students/guardians` | ✅ Implemented | `students.controller.ts:93–134` |
+| Student photo upload | `POST /uploads/photo` | ⚠️ Partial | No file-type filter; local disk storage only |
+| Document upload | `POST /uploads/document` | ⚠️ Partial | Local disk only, no cloud storage |
+
+#### Bed Allotments
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| Assign student to bed | `POST /allotments/assign` | ✅ Implemented | `allotments.controller.ts:40` |
+| Transfer bed | `POST /allotments/transfer` | ✅ Implemented | `allotments.controller.ts:54` |
+| Vacate bed | `POST /allotments/vacate` | ✅ Implemented | `allotments.controller.ts:67` |
+| List/view assignments | `GET /allotments`, `GET /allotments/:id` | ✅ Implemented | `allotments.controller.ts:80,98` |
+| Allotment stats | `GET /allotments/stats` | ✅ Implemented | `allotments.controller.ts:89` |
+
+#### Leave Management
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| Student submits leave | `POST /leave` | ✅ Implemented | `leave.controller.ts:36` |
+| List/view leave requests | `GET /leave`, `GET /leave/:id` | ✅ Implemented | `leave.controller.ts:46,70` |
+| Parent approves | `POST /leave/:id/parent-approve` | ✅ Implemented | `leave.controller.ts:86` |
+| Warden approves | `POST /leave/:id/warden-approve` | ✅ Implemented | `leave.controller.ts:99` |
+| Reject leave | `POST /leave/:id/reject` | ✅ Implemented | `leave.controller.ts:112` |
+| Cancel leave | `POST /leave/:id/cancel` | ✅ Implemented | `leave.controller.ts:126` |
+| Leave stats | `GET /leave/stats` | ✅ Implemented | `leave.controller.ts:61` |
+
+#### Gate Management
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| Log gate entry/exit (scan) | `POST /gate/entries` | ✅ Implemented | `gate.controller.ts:44` |
+| List/view gate entries | `GET /gate/entries`, `GET /gate/entries/:id` | ✅ Implemented | `gate.controller.ts:54,63` |
+| Create gate pass | `POST /gate/passes` | ✅ Implemented | `gate.controller.ts:74` |
+| List/update gate passes | `GET/PATCH /gate/passes` | ✅ Implemented | `gate.controller.ts:84,102` |
+| Gate stats | `GET /gate/stats` | ✅ Implemented | `gate.controller.ts:117` |
+| QR/barcode scanning UI | — | ❌ Not present | mobile app is a shell only |
+
+#### Violations
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| Auto-generated from gate entries | (service logic) | ⚠️ Partial | `Violation` model exists; no `POST` on controller — violations are created by gate service internally |
+| List violations | `GET /violations` | ✅ Implemented | `violations.controller.ts:36` |
+| Student view own violations | `GET /violations/my`, `GET /violations/student/:id` | ✅ Implemented | `violations.controller.ts:54,69` |
+| Resolve violation | `PATCH /violations/:id/resolve` | ✅ Implemented | `violations.controller.ts:104` |
+| Violation stats | `GET /violations/stats` | ✅ Implemented | `violations.controller.ts:45` |
+
+#### Complaints
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| File complaint | `POST /complaints` | ✅ Implemented | `complaints.controller.ts:37` |
+| List/view complaints | `GET /complaints`, `GET /complaints/:id` | ✅ Implemented | `complaints.controller.ts:47,70` |
+| Update complaint (status/assign) | `PATCH /complaints/:id` | ✅ Implemented | `complaints.controller.ts:85` |
+| Add comment | `POST /complaints/:id/comments` | ✅ Implemented | `complaints.controller.ts:98` |
+| Complaint stats | `GET /complaints/stats` | ✅ Implemented | `complaints.controller.ts:61` |
+
+#### Notices
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| Publish notice | `POST /notices` | ✅ Implemented | `notices.controller.ts:36` |
+| List/view notices | `GET /notices`, `GET /notices/:id` | ✅ Implemented | `notices.controller.ts:46,64` |
+| Update notice | `PATCH /notices/:id` | ✅ Implemented | `notices.controller.ts:74` |
+| Mark notice as read | `POST /notices/:id/read` | ✅ Implemented | `notices.controller.ts:87` |
+| Notice stats | `GET /notices/stats` | ✅ Implemented | `notices.controller.ts:55` |
+
+#### Policies
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| Create policy for building | `POST /policies` | ✅ Implemented | `policies.controller.ts:36` |
+| List policies | `GET /policies` | ✅ Implemented | `policies.controller.ts:49` |
+| Get active policy for building | `GET /policies/building/:id/active` | ✅ Implemented | `policies.controller.ts:58` |
+| Policy version history | `GET /policies/building/:id/history` | ✅ Implemented | `policies.controller.ts:67` |
+| Revise policy (new version) | `PATCH /policies/building/:id/revise` | ✅ Implemented | `policies.controller.ts:86` |
+
+#### Registration (Hostel Admission)
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| Start registration (draft) | `POST /registration` | ✅ Implemented | `registration.controller.ts:48` |
+| Save draft | `PATCH /registration/:id/draft` | ✅ Implemented | `registration.controller.ts:62` |
+| Submit registration | `POST /registration/:id/submit` | ✅ Implemented | `registration.controller.ts:77` |
+| Cancel registration | `POST /registration/:id/cancel` | ✅ Implemented | `registration.controller.ts:92` |
+| My registrations (student) | `GET /registration/my` | ✅ Implemented | `registration.controller.ts:105` |
+| Admin list all | `GET /registration` | ✅ Implemented | `registration.controller.ts:118` |
+| Registration stats | `GET /registration/stats` | ✅ Implemented | `registration.controller.ts:127` |
+| Find by application number | `GET /registration/by-application/:no` | ✅ Implemented | `registration.controller.ts:136` |
+| Review (approve/reject) | `POST /registration/:id/review` | ✅ Implemented | `registration.controller.ts:156` |
+| Allot room/bed | `POST /registration/:id/allot` | ✅ Implemented | `registration.controller.ts:171` |
+| Record fee payment | `POST /registration/:id/fee` | ✅ Implemented | `registration.controller.ts:187` |
+
+#### Notifications
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| List my notifications | `GET /notifications` | ✅ Implemented | `notifications.controller.ts:30` |
+| Unread count | `GET /notifications/unread-count` | ✅ Implemented | `notifications.controller.ts:41` |
+| Mark single as read | `PATCH /notifications/:id/read` | ✅ Implemented | `notifications.controller.ts:49` |
+| Mark all as read | `PATCH /notifications/read-all` | ✅ Implemented | `notifications.controller.ts:60` |
+| Email/SMS/Push delivery | — | ❌ Not present | `NotificationChannel` enum has these; no transport wired. SMTP/SMS vars commented in `.env.example` |
+
+#### Infrastructure / Cross-cutting
+
+| Feature | Endpoint | Status | Evidence |
+|---|---|---|---|
+| Health check | `GET /health` | ✅ Implemented | `health.controller.ts` — checks DB with `SELECT 1` |
+| Audit log query | `GET /audit/logs` | ✅ Implemented | `audit.controller.ts:38` |
+| Dashboard stats | `GET /dashboard/stats` | ✅ Implemented | `dashboard.controller.ts` — 14 parallel Prisma queries + 7 day login trend |
+| Mess management | — | ❌ Not present | Mentioned in architecture doc, no module in `src/` or `app.module.ts` |
+
+---
+
+### 4.2 Web Frontend Routes (Next.js App Router)
+
+`apps/web/src/app/` structure:
+
+| Route | Component File | Status |
+|---|---|---|
+| `/` | `app/page.tsx` | ⚠️ Redirects to login or dashboard |
+| `/login` | `app/login/page.tsx` | ✅ Implemented |
+| `/signup` | `app/signup/page.tsx` | ✅ Implemented |
+| `/dashboard` | `app/dashboard/page.tsx` (38 KB) | ⚠️ Large single-file; needs review for mock data |
+| `/dashboard/users` | `app/dashboard/users/` | ⚠️ Directory present (1 file) |
+| `/dashboard/hostels` | `app/dashboard/hostels/` | ⚠️ Directory present (2 files) |
+| `/dashboard/rooms` | `app/dashboard/rooms/` | ⚠️ Directory present |
+| `/dashboard/buildings` | `app/dashboard/buildings/` | ⚠️ Directory present |
+| `/dashboard/students` | `app/dashboard/students/` | ⚠️ Directory present |
+| `/dashboard/allotments` | `app/dashboard/allotments/` | ⚠️ Directory present |
+| `/dashboard/leave` | `app/dashboard/leave/` | ⚠️ Directory present |
+| `/dashboard/complaints` | `app/dashboard/complaints/` | ⚠️ Directory present |
+| `/dashboard/notices` | `app/dashboard/notices/` | ⚠️ Directory present |
+| `/dashboard/gate` | `app/dashboard/gate/` | ⚠️ Directory present |
+| `/dashboard/violations` | `app/dashboard/violations/` | ⚠️ Directory present |
+| `/dashboard/policies` | `app/dashboard/policies/` | ⚠️ Directory present |
+| `/dashboard/registration` | `app/dashboard/registration/` | ⚠️ Directory present |
+| `/dashboard/notifications` | `app/dashboard/notifications/` | ⚠️ Directory present |
+| `/dashboard/audit` | `app/dashboard/audit/` | ⚠️ Directory present |
+| `/dashboard/settings` | `app/dashboard/settings/` | ⚠️ Directory present |
+
+> All dashboard sub-sections have directory structures but are not individually verified for full implementation vs stub.
+
+### 4.3 Mobile App Routes (Expo Router)
+
+`apps/mobile/app/`:
+
+| Route | File | Status |
+|---|---|---|
+| `/` (index) | `app/index.tsx` | ⚠️ Minimal — likely redirect/splash |
+| `/login` | `app/login.tsx` | ⚠️ Basic login form |
+| Root layout | `app/_layout.tsx` | ⚠️ Shell only |
+
+**Assessment:** The mobile app is a Phase 1 placeholder shell. No student-facing features (leave requests, gate passes, notices, violations) are implemented in mobile.
+
+---
+
+## 5. Requirement Coverage
+
+*Source: `docs/architecture.md`, `docs/rbac-matrix.md`, `docs/assumptions.md`, inferred from module names.*
+
+| Requirement Area | Phase | Status | Notes |
+|---|---|---|---|
+| User auth (login, signup, JWT) | 1 | ✅ Implemented | Full rotation, reuse detection |
+| RBAC (11 roles, permissions) | 1 | ✅ Implemented | Guards on all endpoints; seeded |
+| Audit logging | 1 | ✅ Implemented | Synchronous; fire-and-forget on failure |
+| Hostel CRUD | 2 | ✅ Implemented | + stats endpoint |
+| Room + Bed management | 2 | ✅ Implemented | Bulk create, auto-bed generation |
+| Building management | 3 | ✅ Implemented | |
+| Policy engine (curfew, leave rules) | 3 | ✅ Implemented | Versioned; snapshot on gate events |
+| Student profiles | 3 | ✅ Implemented | Rich profile with Int'l student fields |
+| Guardian links | 3 | ✅ Implemented | Primary flag, CRUD |
+| Bed allotments | 3 | ✅ Implemented | Assign / transfer / vacate lifecycle |
+| Leave management | 4 | ✅ Implemented | Parent + warden dual approval flow |
+| Complaints | 4 | ✅ Implemented | Categories, priority, comments |
+| Notices / Announcements | 4 | ✅ Implemented | Scoped (All/Building/Hostel), read-tracking |
+| Gate entry/exit logging | 4 | ✅ Implemented | Curfew + late entry flags |
+| Gate passes | 4 | ✅ Implemented | Time-bounded, approval flow |
+| Violations (auto from gate) | 5 | ⚠️ Partial | Schema + controller ready; creation logic in gate service — needs verification |
+| Policy Snapshots | 5 | ✅ Implemented | Captured per gate entry |
+| In-app notifications | 5 | ✅ Implemented | Stored in DB |
+| Email/SMS/Push delivery | 5 | ❌ Missing | Channels in schema; no transport |
+| Hostel registration / admission | 6 | ✅ Implemented | Full lifecycle: draft→submit→review→allot |
+| Fee recording | 6 | ✅ Implemented | HOSTEL_FEE, MESS_FEE, CAUTION_DEPOSIT |
+| Online payment (Razorpay) | — | ❌ Missing | Commented out in env; not implemented |
+| Mess management | — | ❌ Missing | Documented in arch; no module exists |
+| MFA / TOTP | — | ❌ Missing | Deferred to Phase 2 |
+| Background jobs (queues) | — | ❌ Missing | Redis provisioned; no BullMQ workers |
+| Cloud file storage (S3) | — | ❌ Missing | Docs mentioned; env stubbed; local disk only |
+| Mobile student app | — | ⚠️ Stub | 3 screens; login shell only |
+
+---
+
+## 6. Behavioral Walkthrough
+
+### 6.1 Login Flow
+
+1. Client: `POST /api/v1/auth/login` `{ identifier, password }` — identifier can be email, mobile, or USN
+2. `AuthService.login()` → `prisma.user.findFirst({ where: { OR: [email, mobile, usn] } })`
+3. `bcrypt.compare(password, user.passwordHash)` — rejects if mismatch
+4. Checks `user.status === ACTIVE` — rejects INACTIVE/SUSPENDED/PENDING_VERIFICATION with 403
+5. Creates `RefreshToken` record with `tokenHash = bcrypt(rawToken)`, stores `ipAddress` + `deviceInfo`
+6. Returns `{ accessToken (15m), refreshToken (raw, 7d) }` + user profile + roles
+7. `AuditInterceptor` records `action=LOGIN` in `audit_logs` table
+
+### 6.2 Protected Request Flow
+
+1. Client: any protected endpoint with `Authorization: Bearer <accessToken>`
+2. `JwtAuthGuard` (Passport JWT strategy) — decodes/validates token
+3. Attaches `{ id, email, roles: string[], permissions: string[] }` to `req.user`
+4. `RolesGuard` checks `@Roles(...)` decorator — OR logic
+5. Controller action executes; `AuditInterceptor` fires post-action for mutation endpoints
+
+### 6.3 Student Registration Lifecycle
+
+```
+DRAFT → (student saves form) → SUBMITTED → (admin reviews) →
+  UNDER_REVIEW → APPROVED → (warden allots bed) → ALLOTTED
+             └── DOCUMENTS_PENDING → SUBMITTED (resubmit)
+             └── REJECTED / WAITLISTED / CANCELLED
+```
+
+- Draft auto-saves via `PATCH /registration/:id/draft`
+- Submission validates all 5 declaration flags (`hosteliteDeclarationAccepted`, etc.)
+- Admin reviews via `POST /registration/:id/review` (approve/reject/waitlist/docs-pending)
+- Allot calls `AllotmentsService` internally to create `BedAssignment`
+- Fee recorded up to N times via `POST /registration/:id/fee`
+
+### 6.4 Gate Entry → Violation Flow
+
+```
+Security Guard: POST /gate/entries { studentId, type: 'IN', gateNo, timestamp }
+  → GateService.createEntry()
+  → Checks if isLateEntry (compares timestamp to policy curfew)
+  → Creates GateEntry with policySnapshotId
+  → If late → Violation record created (LATE_ENTRY type)
+  → Notification dispatched to student + parent (IN_APP only currently)
+```
+
+### 6.5 Leave Approval Flow
+
+```
+Student: POST /leave { hostelId, type, fromDate, toDate, reason }
+  → status = PENDING
+
+Parent (if parentApprovalRequired in policy):
+  POST /leave/:id/parent-approve → status = PARENT_APPROVED
+
+Warden:
+  POST /leave/:id/warden-approve → status = WARDEN_APPROVED
+
+Any approved leave auto-links to GateEntry via linkedLeaveId when student exits.
+```
+
+### 6.6 Error Handling Patterns
+
+- `NotFoundException` — thrown in service layers with descriptive messages
+- `ConflictException` — used for duplicate records (unique constraint violations from Prisma)
+- `BadRequestException` — DTO validation failures (global ValidationPipe) + business rule violations
+- `UnauthorizedException` — expired tokens, bad credentials
+- `ForbiddenException` — wrong role / resource ownership (`complaints.controller.ts:79`)
+- **No global exception filter** found — relies on NestJS defaults (returns `{ statusCode, message }`)
+
+---
+
+## 7. Risks & Hotspots
+
+### 🔴 Critical
+
+| # | Issue | Evidence | Severity |
+|---|---|---|---|
+| C1 | **Upload photo endpoint has no file type filter** — `uploadPhoto()` in `uploads.controller.ts:42` uses `FileInterceptor('file')` with no `fileFilter`, unlike `uploadDocument()` (line 64) which validates extensions. An attacker can upload any file type (including `.exe`, `.html`, `.svg`) as a "photo" and access it via the static asset route. | `apps/api/src/uploads/uploads.controller.ts:28–59` | Critical |
+| C2 | **Uploaded files served from local disk with no access control** — `main.ts:17` serves `uploads/` as static assets with prefix `/uploads/`. Any file URL is publicly accessible without auth. Combined with C1, this is a stored file exposure risk. | `apps/api/src/main.ts:16–19` | Critical |
+
+### 🟠 High
+
+| # | Issue | Evidence | Severity |
+|---|---|---|---|
+| H1 | **No password reset / forgot password flow** — No endpoint exists (no `POST /auth/forgot-password` or `POST /auth/reset-password`). Users who forget their password can only be reset by an admin via `PATCH /users/:id`. This is a major gap for a live system. | Confirmed by searching entire `src/` — not found | High |
+| H2 | **Role assignment has no API endpoint** — The RBAC matrix specifies `ROLE_ASSIGN` / `ROLE_REVOKE` permissions but there is no `/users/:id/roles` or `/roles` endpoint. Role assignment can only be done via direct DB seed or Prisma Studio. | `docs/rbac-matrix.md:30-31`, no route found | High |
+| H3 | **Dashboard controller queries DB directly** — `DashboardController` injects `PrismaService` directly and executes 14+ parallel queries in a single request, plus a 7-iteration loop (one query per day for login trend). This is an **N+1 loop query** (`dashboard.controller.ts:97–116`). At scale, this single endpoint could be a bottleneck. | `apps/api/src/dashboard/dashboard.controller.ts:97–116` | High |
+| H4 | **Token storage in localStorage** — `assumptions.md:25` explicitly states "tokens stored in localStorage for Phase 1." This exposes access tokens to XSS attacks in the web app. | `docs/assumptions.md:52` | High |
+| H5 | **Seed credentials committed to `.env.example`** — `SEED_ADMIN_EMAIL=admin@bms.local`, `SEED_ADMIN_PASSWORD=Admin@123456` are in `apps/api/.env.example` and root `.env.example`. If this file is committed to a public/shared repo, default credentials are exposed. | `apps/api/.env.example:21-22`, `.env.example:55-56` | High |
+
+### 🟡 Medium
+
+| # | Issue | Evidence | Severity |
+|---|---|---|---|
+| M1 | **Notification delivery not implemented** — `Notification.channel` supports EMAIL, SMS, PUSH, IN_APP. Only IN_APP is stored. No SMTP, SMS provider, or push integration wired. SMTP/SMS vars are commented in `.env.example`. Users set to be notified about gate events, violations, etc. silently receive nothing externally. | `apps/api/src/notifications/`, `.env.example:47-52` | Medium |
+| M2 | **Leave controller filters by `user.roles` using `Array.includes` on a plain array** — `leave.controller.ts:52`: `user.roles?.includes('STUDENT')`. If the JWT payload doesn't populate `roles` as a flat string array, this silently returns all leave data to a student who should only see their own. Same pattern in complaints and violations controllers. | `leave.controller.ts:52,78`, `complaints.controller.ts:53`, `violations.controller.ts:79` | Medium |
+| M3 | **No pagination on audit log default limit is 200** — `audit.controller.ts:28`: `@Max(200)` allows fetching up to 200 audit records per page. This is acceptable but the audit table can grow unbounded with no archival/cleanup strategy documented. | `audit.controller.ts:28` | Medium |
+| M4 | **DashboardController bypasses `DashboardModule`** — It injects `PrismaService` directly rather than delegating to individual module services. This breaks module encapsulation and makes it hard to add caching or permission granularity later. | `dashboard.controller.ts:13` | Medium |
+| M5 | **Mess Management is documented but completely absent** — Architecture doc (`architecture.md:46`) shows a "Mess Module" as a core module. No `mess/` directory exists in `src/`, it's not in `app.module.ts`, and the RBAC matrix defines `MESS_MANAGE` and `MESS_SCAN` permissions that have no enforcing code. | `apps/api/src/` — no `mess` directory | Medium |
+| M6 | **`apps/api/.env` committed** — The `apps/api/` directory has a `.env` file present (shown in the file listing). This is different from `.env.example`. If it contains real secrets, it should not be tracked. | `apps/api/.env` (472 bytes) | Medium |
+
+### 🔵 Low
+
+| # | Issue | Evidence | Severity |
+|---|---|---|---|
+| L1 | **Violations controller has no POST** — Violations are auto-created by the gate service. If there's a bug in gate logic, violations cannot be manually corrected through the API. | `violations.controller.ts` — no `@Post()` | Low |
+| L2 | **Rate limiting global defaults may be too permissive** — Global throttler: 10/s short, 30/min medium (`app.module.ts:36-45`). Auth endpoints override this (5/min login, 10/min refresh). But general API endpoints under `SUPER_ADMIN` roles are not additionally throttled. | `app.module.ts:34-45` | Low |
+| L3 | **Swagger version mismatch** — `main.ts:57` sets API version `0.2.0` but `health.controller.ts:22` returns `version: '0.1.0'`. Minor inconsistency. | `main.ts:57`, `health.controller.ts:22` | Low |
+| L4 | **Redis provisioned but idle** — `docker-compose.yml` starts Redis; it occupies memory/resources but is unused in Phase 1. No BullMQ queue, no cache. | `docs/assumptions.md:46` | Low |
+| L5 | **No i18n — hardcoded English strings** — Error messages, constants are English-only. Not a current risk given `assumptions.md:29`, but worth noting for future. | `docs/assumptions.md:59` | Low |
+
+---
+
+## 8. Appendix
+
+### A. Full Endpoint List
+
+| Method | Path | Handler File | Guard / Roles |
+|---|---|---|---|
+| GET | `/api/v1/health` | `health/health.controller.ts` | Public |
+| POST | `/api/v1/auth/login` | `auth/auth.controller.ts` | Public (5/min throttle) |
+| POST | `/api/v1/auth/signup` | `auth/auth.controller.ts` | Public (3/min throttle) |
+| POST | `/api/v1/auth/refresh` | `auth/auth.controller.ts` | Public (10/min throttle) |
+| POST | `/api/v1/auth/logout` | `auth/auth.controller.ts` | JwtAuthGuard |
+| GET | `/api/v1/auth/me` | `auth/auth.controller.ts` | JwtAuthGuard |
+| POST | `/api/v1/users` | `users/users.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
+| GET | `/api/v1/users` | `users/users.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| GET | `/api/v1/users/:id` | `users/users.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| PATCH | `/api/v1/users/:id` | `users/users.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
+| DELETE | `/api/v1/users/:id` | `users/users.controller.ts` | SUPER_ADMIN |
+| POST | `/api/v1/hostels` | `hostels/hostels.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
+| GET | `/api/v1/hostels` | `hostels/hostels.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN, STUDENT |
+| GET | `/api/v1/hostels/stats` | `hostels/hostels.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| GET | `/api/v1/hostels/:id` | `hostels/hostels.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| PATCH | `/api/v1/hostels/:id` | `hostels/hostels.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
+| DELETE | `/api/v1/hostels/:id` | `hostels/hostels.controller.ts` | SUPER_ADMIN |
+| POST | `/api/v1/rooms` | `hostels/rooms.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
+| POST | `/api/v1/rooms/bulk` | `hostels/rooms.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
+| GET | `/api/v1/rooms` | `hostels/rooms.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| GET | `/api/v1/rooms/:id` | `hostels/rooms.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| PATCH | `/api/v1/rooms/:id` | `hostels/rooms.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
+| DELETE | `/api/v1/rooms/:id` | `hostels/rooms.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
+| POST | `/api/v1/buildings` | `buildings/buildings.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
+| GET | `/api/v1/buildings` | `buildings/buildings.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| GET | `/api/v1/buildings/stats` | `buildings/buildings.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| GET | `/api/v1/buildings/:id` | `buildings/buildings.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| PATCH | `/api/v1/buildings/:id` | `buildings/buildings.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
+| DELETE | `/api/v1/buildings/:id` | `buildings/buildings.controller.ts` | SUPER_ADMIN |
+| POST | `/api/v1/policies` | `policies/policies.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
+| GET | `/api/v1/policies` | `policies/policies.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| GET | `/api/v1/policies/building/:id/active` | `policies/policies.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| GET | `/api/v1/policies/building/:id/history` | `policies/policies.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| GET | `/api/v1/policies/:id` | `policies/policies.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| PATCH | `/api/v1/policies/building/:id/revise` | `policies/policies.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
+| POST | `/api/v1/students/profiles` | `students/students.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| GET | `/api/v1/students/profiles` | `students/students.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| GET | `/api/v1/students/profiles/:userId` | `students/students.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN, STUDENT |
+| PATCH | `/api/v1/students/profiles/:userId` | `students/students.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| POST | `/api/v1/students/guardians` | `students/students.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| GET | `/api/v1/students/guardians/:studentId` | `students/students.controller.ts` | SUPER_ADMIN…PARENT |
+| PATCH | `/api/v1/students/guardians/:id` | `students/students.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| DELETE | `/api/v1/students/guardians/:id` | `students/students.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
+| POST | `/api/v1/allotments/assign` | `allotments/allotments.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| POST | `/api/v1/allotments/transfer` | `allotments/allotments.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| POST | `/api/v1/allotments/vacate` | `allotments/allotments.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| GET | `/api/v1/allotments` | `allotments/allotments.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| GET | `/api/v1/allotments/stats` | `allotments/allotments.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| GET | `/api/v1/allotments/:id` | `allotments/allotments.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| POST | `/api/v1/leave` | `leave/leave.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN, STUDENT |
+| GET | `/api/v1/leave` | `leave/leave.controller.ts` | SUPER_ADMIN…PARENT |
+| GET | `/api/v1/leave/stats` | `leave/leave.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| GET | `/api/v1/leave/:id` | `leave/leave.controller.ts` | SUPER_ADMIN…PARENT |
+| POST | `/api/v1/leave/:id/parent-approve` | `leave/leave.controller.ts` | SUPER_ADMIN, PARENT |
+| POST | `/api/v1/leave/:id/warden-approve` | `leave/leave.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| POST | `/api/v1/leave/:id/reject` | `leave/leave.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| POST | `/api/v1/leave/:id/cancel` | `leave/leave.controller.ts` | SUPER_ADMIN, STUDENT |
+| POST | `/api/v1/complaints` | `complaints/complaints.controller.ts` | SUPER_ADMIN…STUDENT |
+| GET | `/api/v1/complaints` | `complaints/complaints.controller.ts` | SUPER_ADMIN…MAINTENANCE_STAFF, STUDENT |
+| GET | `/api/v1/complaints/stats` | `complaints/complaints.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| GET | `/api/v1/complaints/:id` | `complaints/complaints.controller.ts` | SUPER_ADMIN…MAINTENANCE_STAFF, STUDENT |
+| PATCH | `/api/v1/complaints/:id` | `complaints/complaints.controller.ts` | SUPER_ADMIN…MAINTENANCE_STAFF |
+| POST | `/api/v1/complaints/:id/comments` | `complaints/complaints.controller.ts` | SUPER_ADMIN…MAINTENANCE_STAFF, STUDENT |
+| POST | `/api/v1/notices` | `notices/notices.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| GET | `/api/v1/notices` | `notices/notices.controller.ts` | SUPER_ADMIN…STUDENT, PARENT |
+| GET | `/api/v1/notices/stats` | `notices/notices.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| GET | `/api/v1/notices/:id` | `notices/notices.controller.ts` | SUPER_ADMIN…STUDENT, PARENT |
+| PATCH | `/api/v1/notices/:id` | `notices/notices.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| POST | `/api/v1/notices/:id/read` | `notices/notices.controller.ts` | SUPER_ADMIN…STUDENT, PARENT |
+| POST | `/api/v1/gate/entries` | `gate/gate.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, SECURITY_GUARD |
+| GET | `/api/v1/gate/entries` | `gate/gate.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN, SECURITY_GUARD |
+| GET | `/api/v1/gate/entries/:id` | `gate/gate.controller.ts` | same |
+| POST | `/api/v1/gate/passes` | `gate/gate.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| GET | `/api/v1/gate/passes` | `gate/gate.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN, SECURITY_GUARD |
+| GET | `/api/v1/gate/passes/:id` | `gate/gate.controller.ts` | same |
+| PATCH | `/api/v1/gate/passes/:id` | `gate/gate.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, SECURITY_GUARD |
+| GET | `/api/v1/gate/stats` | `gate/gate.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, SECURITY_GUARD |
+| GET | `/api/v1/violations` | `violations/violations.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| GET | `/api/v1/violations/stats` | `violations/violations.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| GET | `/api/v1/violations/my` | `violations/violations.controller.ts` | STUDENT |
+| GET | `/api/v1/violations/student/:id` | `violations/violations.controller.ts` | SUPER_ADMIN…STUDENT |
+| GET | `/api/v1/violations/:id` | `violations/violations.controller.ts` | SUPER_ADMIN…STUDENT |
+| PATCH | `/api/v1/violations/:id/resolve` | `violations/violations.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| POST | `/api/v1/registration` | `registration/registration.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, STUDENT |
+| PATCH | `/api/v1/registration/:id/draft` | `registration/registration.controller.ts` | same |
+| POST | `/api/v1/registration/:id/submit` | `registration/registration.controller.ts` | same |
+| POST | `/api/v1/registration/:id/cancel` | `registration/registration.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, STUDENT |
+| GET | `/api/v1/registration/my` | `registration/registration.controller.ts` | STUDENT |
+| GET | `/api/v1/registration` | `registration/registration.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN, ACCOUNTS_OFFICER |
+| GET | `/api/v1/registration/stats` | `registration/registration.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| GET | `/api/v1/registration/by-application/:no` | `registration/registration.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| GET | `/api/v1/registration/:id` | `registration/registration.controller.ts` | SUPER_ADMIN…STUDENT, ACCOUNTS_OFFICER |
+| POST | `/api/v1/registration/:id/review` | `registration/registration.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| POST | `/api/v1/registration/:id/allot` | `registration/registration.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN |
+| POST | `/api/v1/registration/:id/fee` | `registration/registration.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, ACCOUNTS_OFFICER |
+| GET | `/api/v1/notifications` | `notifications/notifications.controller.ts` | JwtAuthGuard (all) |
+| GET | `/api/v1/notifications/unread-count` | `notifications/notifications.controller.ts` | JwtAuthGuard |
+| PATCH | `/api/v1/notifications/:id/read` | `notifications/notifications.controller.ts` | JwtAuthGuard |
+| PATCH | `/api/v1/notifications/read-all` | `notifications/notifications.controller.ts` | JwtAuthGuard |
+| POST | `/api/v1/uploads/photo` | `uploads/uploads.controller.ts` | JwtAuthGuard |
+| POST | `/api/v1/uploads/document` | `uploads/uploads.controller.ts` | JwtAuthGuard |
+| GET | `/api/v1/dashboard/stats` | `dashboard/dashboard.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
+| GET | `/api/v1/audit/logs` | `audit/audit.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
+
+**Total: ~90 unique endpoints across 19 modules.**
+
+---
+
+### B. UI Route List
+
+| Route | File |
+|---|---|
+| `/` | `apps/web/src/app/page.tsx` |
+| `/login` | `apps/web/src/app/login/page.tsx` |
+| `/signup` | `apps/web/src/app/signup/page.tsx` |
+| `/dashboard` | `apps/web/src/app/dashboard/page.tsx` |
+| `/dashboard/users` | `apps/web/src/app/dashboard/users/page.tsx` |
+| `/dashboard/hostels` | `apps/web/src/app/dashboard/hostels/` |
+| `/dashboard/rooms` | `apps/web/src/app/dashboard/rooms/page.tsx` |
+| `/dashboard/buildings` | `apps/web/src/app/dashboard/buildings/page.tsx` |
+| `/dashboard/students` | `apps/web/src/app/dashboard/students/page.tsx` |
+| `/dashboard/allotments` | `apps/web/src/app/dashboard/allotments/page.tsx` |
+| `/dashboard/leave` | `apps/web/src/app/dashboard/leave/page.tsx` |
+| `/dashboard/complaints` | `apps/web/src/app/dashboard/complaints/page.tsx` |
+| `/dashboard/notices` | `apps/web/src/app/dashboard/notices/page.tsx` |
+| `/dashboard/gate` | `apps/web/src/app/dashboard/gate/page.tsx` |
+| `/dashboard/violations` | `apps/web/src/app/dashboard/violations/page.tsx` |
+| `/dashboard/policies` | `apps/web/src/app/dashboard/policies/page.tsx` |
+| `/dashboard/registration` | `apps/web/src/app/dashboard/registration/page.tsx` |
+| `/dashboard/notifications` | `apps/web/src/app/dashboard/notifications/page.tsx` |
+| `/dashboard/audit` | `apps/web/src/app/dashboard/audit/page.tsx` |
+| `/dashboard/settings` | `apps/web/src/app/dashboard/settings/page.tsx` |
+| Mobile: `/` | `apps/mobile/app/index.tsx` |
+| Mobile: `/login` | `apps/mobile/app/login.tsx` |
+
+---
+
+### C. DB Schema Summary
+
+| Model | Table | Phase | Key Relations |
+|---|---|---|---|
+| `User` | `users` | 1 | → UserRole, RefreshToken, AuditLog, StudentProfile, Bed (all others) |
+| `Role` | `roles` | 1 | → UserRole, RolePermission |
+| `Permission` | `permissions` | 1 | → RolePermission |
+| `UserRole` | `user_roles` | 1 | User ↔ Role (with optional hostelId scope) |
+| `RolePermission` | `role_permissions` | 1 | Role ↔ Permission M:N |
+| `RefreshToken` | `refresh_tokens` | 1 | → User; stores bcrypt hash |
+| `AuditLog` | `audit_logs` | 1 | → User (nullable); JSON details |
+| `Hostel` | `hostels` | 2 | → Room[], UserRole[], Building? |
+| `Room` | `rooms` | 2 | → Hostel, Bed[] |
+| `Bed` | `beds` | 2 | → Room, User? (student), BedAssignment[] |
+| `Building` | `buildings` | 3 | → Hostel[], BuildingPolicy[], PolicySnapshot[], Notice[] |
+| `BuildingPolicy` | `building_policies` | 3 | → Building; versioned, isActive flag |
+| `StudentProfile` | `student_profiles` | 3 | 1:1 → User; 45+ fields |
+| `GuardianLink` | `guardian_links` | 3 | Student ↔ Guardian (User) M:N |
+| `BedAssignment` | `bed_assignments` | 3 | Student → Bed; lifecycle: ACTIVE/VACATED/TRANSFERRED/EXPIRED |
+| `LeaveRequest` | `leave_requests` | 4 | → Student, Hostel, Warden, Parent; dual-approval |
+| `Complaint` | `complaints` + `complaint_comments` | 4 | → Student, Hostel, AssignedTo |
+| `Notice` | `notices` + `notice_recipients` | 4 | Scoped: ALL/BUILDING/HOSTEL |
+| `GateEntry` | `gate_entries` | 4 | → Student, LeaveRequest (linked), PolicySnapshot |
+| `GatePass` | `gate_passes` | 4 | → Student, ApprovedBy |
+| `PolicySnapshot` | `policy_snapshots` | 5 | Immutable copy at gate scan time → GateEntry, Violation |
+| `Violation` | `violations` | 5 | → Student, GateEntry, PolicySnapshot; escalation state machine |
+| `Notification` | `notifications` | 5 | → User (recipient), Violation?, GateEntry? |
+| `HostelRegistration` | `hostel_registrations` | 6 | → Student, Hostel, Reviewer; 5 declaration flags |
+| `RegistrationFee` | `registration_fees` | 6 | → HostelRegistration, RecordedBy |
+
+**Enums (20+):** `UserStatus`, `HostelType`, `HostelStatus`, `RoomType`, `RoomStatus`, `BedStatus`, `BuildingStatus`, `AssignmentStatus`, `LeaveType`, `LeaveStatus`, `ComplaintCategory`, `ComplaintPriority`, `ComplaintStatus`, `NoticePriority`, `NoticeScope`, `GateEntryType`, `GatePassStatus`, `ViolationType`, `EscalationState`, `NotificationState`, `NotificationChannel`, `AdmissionMode`, `RegistrationStatus`, `FeeType`
+
+---
+
+### D. Config & Environment Variables
+
+| Variable | Purpose |
+|---|---|
+| `NODE_ENV` | Environment: development/production |
+| `APP_PORT` | API port (default 3001) |
+| `APP_URL` | Self-referential URL |
+| `FRONTEND_URL` | Allowed CORS origin |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Database connection parts |
+| `DATABASE_URL` | Prisma connection string (composed from above) |
+| `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` | Redis connection |
+| `JWT_SECRET` | HS256 signing secret (min 32 chars) |
+| `JWT_ACCESS_EXPIRY` | Access token expiry (default `15m`) |
+| `JWT_REFRESH_EXPIRY` | Refresh token expiry (default `7d`) |
+| `THROTTLE_TTL`, `THROTTLE_LIMIT` | Global rate limiter config |
+| `SEED_ADMIN_EMAIL` | Seeded super admin email |
+| `SEED_ADMIN_PASSWORD` | Seeded super admin password |
+| *(commented)* `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, etc. | S3 storage (not yet used) |
+| *(commented)* `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, etc. | Payment gateway (not yet used) |
+| *(commented)* `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMS_PROVIDER_API_KEY` | Email/SMS (not yet used) |
+
+> [!IMPORTANT]
+> Never print or log `JWT_SECRET`, `DB_PASSWORD`, `REDIS_PASSWORD`, `RAZORPAY_KEY_SECRET`, or `SMTP_PASSWORD`. The `AuditService` already redacts `password` and `token` fields from audit log details.

@@ -39,6 +39,11 @@ export class CreateLeaveRequestDto {
   @ApiProperty({ example: 'Going home for family function' })
   @IsString()
   reason: string;
+
+  @ApiPropertyOptional({ description: 'URL of proof/attachment (uploaded via /uploads)' })
+  @IsOptional()
+  @IsString()
+  proofUrl?: string;
 }
 
 export class ApproveLeaveDto {
@@ -81,10 +86,10 @@ export class ListLeaveQueryDto {
   hostelId?: string;
 
   @ApiPropertyOptional({
-    enum: ['PENDING', 'PARENT_APPROVED', 'WARDEN_APPROVED', 'REJECTED', 'CANCELLED'],
+    enum: ['PENDING', 'PARENT_APPROVED', 'PARENT_REJECTED', 'WARDEN_APPROVED', 'REJECTED', 'CANCELLED'],
   })
   @IsOptional()
-  @IsEnum(['PENDING', 'PARENT_APPROVED', 'WARDEN_APPROVED', 'REJECTED', 'CANCELLED'])
+  @IsEnum(['PENDING', 'PARENT_APPROVED', 'PARENT_REJECTED', 'WARDEN_APPROVED', 'REJECTED', 'CANCELLED'])
   status?: string;
 
   @ApiPropertyOptional({

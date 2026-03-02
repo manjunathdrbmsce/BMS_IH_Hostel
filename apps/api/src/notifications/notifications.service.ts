@@ -10,13 +10,14 @@ export interface CreateNotificationInput {
   message: string;
   violationId?: string;
   gateEntryId?: string;
+  leaveRequestId?: string;
 }
 
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   // -----------------------------------------------------------------------
   // Create + Dispatch
@@ -31,6 +32,7 @@ export class NotificationsService {
         message: input.message,
         violationId: input.violationId || null,
         gateEntryId: input.gateEntryId || null,
+        leaveRequestId: input.leaveRequestId || null,
         state: 'PENDING',
       },
     });
@@ -120,13 +122,13 @@ export class NotificationsService {
     const globalWardens =
       wardenRoles.length === 0
         ? await this.prisma.userRole.findMany({
-            where: {
-              role: { name: { in: ['WARDEN', 'DEPUTY_WARDEN'] } },
-              hostelId: null,
-              revokedAt: null,
-            },
-            select: { userId: true },
-          })
+          where: {
+            role: { name: { in: ['WARDEN', 'DEPUTY_WARDEN'] } },
+            hostelId: null,
+            revokedAt: null,
+          },
+          select: { userId: true },
+        })
         : [];
 
     const allWardenIds = [

@@ -21,6 +21,7 @@ import { HealthModule } from './health/health.module';
 import { AuditModule } from './audit/audit.module';
 import { RegistrationModule } from './registration/registration.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { UploadsModule } from './uploads/uploads.module';
     RegistrationModule,
     UploadsModule,
     DashboardModule,
+    WhatsAppModule,
     HealthModule,
   ],
   providers: [
@@ -72,4 +74,4 @@ import { UploadsModule } from './uploads/uploads.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

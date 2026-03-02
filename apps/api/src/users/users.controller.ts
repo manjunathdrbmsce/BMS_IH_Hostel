@@ -11,6 +11,7 @@ import {
   UseInterceptors,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
   ApiOperation,
@@ -32,10 +33,11 @@ import { AuditAction } from '../audit/audit.decorator';
 @UseInterceptors(AuditInterceptor)
 @ApiBearerAuth('access-token')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) { }
 
   @Post()
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN')
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @AuditAction('USER_CREATE', 'users')
   @ApiOperation({ summary: 'Create a new user' })
   @ApiResponse({ status: 201, description: 'User created' })
@@ -82,6 +84,7 @@ export class UsersController {
 
   @Delete(':id')
   @Roles('SUPER_ADMIN')
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @AuditAction('USER_DELETE', 'users')
   @ApiOperation({ summary: 'Deactivate user (soft delete)' })
   @ApiResponse({ status: 200, description: 'User deactivated' })
