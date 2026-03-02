@@ -71,6 +71,15 @@ model User {
   registrationsReviewed HostelRegistration[] @relation("RegistrationReviewer")
   registrationFees      RegistrationFee[]    @relation("FeeRecordedBy")
 
+  // Phase 7: Attendance relations
+  attendanceRecords      DailyAttendance[]    @relation("AttendanceStudent")
+  attendanceMarked       DailyAttendance[]    @relation("AttendanceMarker")
+  sessionsCreated        AttendanceSession[]  @relation("SessionCreator")
+  studentDevices         StudentDevice[]      @relation("UserDevices")
+  devicesDeactivated     StudentDevice[]      @relation("DeviceDeactivator")
+  deviceChangeRequests   DeviceChangeRequest[] @relation("DeviceRequester")
+  deviceChangesReviewed  DeviceChangeRequest[] @relation("DeviceReviewer")
+
   // Auth - Password Reset
   passwordResetTokens   PasswordResetToken[]
 
@@ -255,6 +264,9 @@ model Hostel {
 
   // Phase 6 relations
   hostelRegistrations HostelRegistration[]
+
+  // Phase 7: Attendance relations
+  attendanceSessions  AttendanceSession[]
 
   @@index([type])
   @@index([status])
@@ -531,7 +543,8 @@ model BedAssignment {
   id         String           @id @default(uuid()) @db.Uuid
   studentId  String           @map("student_id") @db.Uuid
   bedId      String           @map("bed_id") @db.Uuid
-  status     AssignmentStatus @default(ACTIVE)
+  status         AssignmentStatus @default(ACTIVE)
+  presenceStatus PresenceStatus   @default(IN_HOSTEL) @map("presence_status")
 
   assignedAt  DateTime  @default(now()) @map("assigned_at")
   vacatedAt   DateTime? @map("vacated_at")
@@ -591,8 +604,9 @@ model LeaveRequest {
   hostel  Hostel @relation(fields: [hostelId], references: [id])
   warden  User?  @relation("LeaveWarden", fields: [wardenId], references: [id])
   parent  User?  @relation("LeaveParent", fields: [parentId], references: [id])
-  gateEntries   GateEntry[]    @relation("GateLeave")
-  notifications Notification[] @relation("LeaveNotifications")
+  gateEntries          GateEntry[]       @relation("GateLeave")
+  notifications        Notification[]    @relation("LeaveNotifications")
+  attendanceRecords    DailyAttendance[] @relation("AttendanceLeave")
 
   @@index([studentId])
   @@index([hostelId])
@@ -1078,4 +1092,155 @@ enum FeeType {
   MESS_FEE
   CAUTION_DEPOSIT
   OTHER
+}
+
+// ===========================================================================
+// Phase 7: Attendance Tracking (Anti-Proxy, Enterprise-Grade)
+// ===========================================================================
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  ON_LEAVE
+  LATE
+  UNKNOWN
+}
+
+enum AttendanceSource {
+  GATE
+  QR_SCAN
+  ROLL_CALL
+  SYSTEM
+}
+
+enum SessionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum PresenceStatus {
+  IN_HOSTEL
+  OUT_CAMPUS
+  ON_LEAVE
+}
+
+enum DeviceRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ---------------------------------------------------------------------------
+// Daily Attendance — one row per student per day
+// ---------------------------------------------------------------------------
+
+model DailyAttendance {
+  id         String           @id @default(uuid()) @db.Uuid
+  studentId  String           @map("student_id") @db.Uuid
+  date       DateTime         @db.Date
+  status     AttendanceStatus @default(UNKNOWN)
+  firstIn    DateTime?        @map("first_in")
+  lastOut    DateTime?        @map("last_out")
+  lastIn     DateTime?        @map("last_in")
+  isOnLeave  Boolean          @default(false) @map("is_on_leave")
+  leaveId    String?          @map("leave_id") @db.Uuid
+  sessionId  String?          @map("session_id") @db.Uuid
+  markedBy   String?          @map("marked_by") @db.Uuid
+  source     AttendanceSource @default(GATE)
+  gpsLat     Float?           @map("gps_lat")
+  gpsLng     Float?           @map("gps_lng")
+  deviceId   String?          @map("device_id") @db.Uuid
+  notes      String?          @db.Text
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  student    User              @relation("AttendanceStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  leave      LeaveRequest?     @relation("AttendanceLeave", fields: [leaveId], references: [id])
+  session    AttendanceSession? @relation(fields: [sessionId], references: [id])
+  marker     User?             @relation("AttendanceMarker", fields: [markedBy], references: [id])
+
+  @@unique([studentId, date])
+  @@index([date])
+  @@index([status])
+  @@map("daily_attendance")
+}
+
+// ---------------------------------------------------------------------------
+// Attendance Session — warden-initiated roll-call
+// ---------------------------------------------------------------------------
+
+model AttendanceSession {
+  id            String        @id @default(uuid()) @db.Uuid
+  hostelId      String        @map("hostel_id") @db.Uuid
+  createdById   String        @map("created_by_id") @db.Uuid
+  sessionSecret String        @map("session_secret") @db.VarChar(64)
+  title         String?       @db.VarChar(200)
+  startsAt      DateTime      @map("starts_at")
+  expiresAt     DateTime      @map("expires_at")
+  status        SessionStatus @default(ACTIVE)
+  gpsLat        Float         @map("gps_lat")
+  gpsLng        Float         @map("gps_lng")
+  gpsRadiusM    Int           @default(150) @map("gps_radius_m")
+  totalStudents Int           @default(0) @map("total_students")
+  presentCount  Int           @default(0) @map("present_count")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  hostel      Hostel             @relation(fields: [hostelId], references: [id])
+  createdBy   User               @relation("SessionCreator", fields: [createdById], references: [id])
+  attendance  DailyAttendance[]
+
+  @@index([hostelId, status])
+  @@index([expiresAt])
+  @@map("attendance_sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Student Device — fingerprint binding for anti-proxy
+// ---------------------------------------------------------------------------
+
+model StudentDevice {
+  id              String       @id @default(uuid()) @db.Uuid
+  userId          String       @map("user_id") @db.Uuid
+  fingerprint     String       @db.VarChar(255)
+  deviceName      String?      @map("device_name") @db.VarChar(200)
+  platform        String?      @db.VarChar(50)
+  isActive        Boolean      @default(true) @map("is_active")
+  registeredAt    DateTime     @default(now()) @map("registered_at")
+  deactivatedAt   DateTime?    @map("deactivated_at")
+  deactivatedById String?      @map("deactivated_by_id") @db.Uuid
+
+  // Relations
+  user          User  @relation("UserDevices", fields: [userId], references: [id], onDelete: Cascade)
+  deactivatedBy User? @relation("DeviceDeactivator", fields: [deactivatedById], references: [id])
+
+  @@index([userId, isActive])
+  @@index([fingerprint])
+  @@map("student_devices")
+}
+
+// ---------------------------------------------------------------------------
+// Device Change Request — warden-approved re-bind
+// ---------------------------------------------------------------------------
+
+model DeviceChangeRequest {
+  id              String              @id @default(uuid()) @db.Uuid
+  userId          String              @map("user_id") @db.Uuid
+  newFingerprint  String              @map("new_fingerprint") @db.VarChar(255)
+  newDeviceName   String?             @map("new_device_name") @db.VarChar(200)
+  newPlatform     String?             @map("new_platform") @db.VarChar(50)
+  reason          String?             @db.Text
+  status          DeviceRequestStatus @default(PENDING)
+  reviewedById    String?             @map("reviewed_by_id") @db.Uuid
+  reviewedAt      DateTime?           @map("reviewed_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  // Relations
+  user       User  @relation("DeviceRequester", fields: [userId], references: [id])
+  reviewedBy User? @relation("DeviceReviewer", fields: [reviewedById], references: [id])
+
+  @@index([userId, status])
+  @@map("device_change_requests")
 }

@@ -8,6 +8,7 @@ import { Prisma, GateEntryType, GatePassStatus, ViolationType } from '@prisma/cl
 import { PrismaService } from '../prisma/prisma.service';
 import { ViolationsService } from '../violations/violations.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AttendanceService } from '../attendance/attendance.service';
 import {
   CreateGateEntryDto,
   CreateGatePassDto,
@@ -24,7 +25,8 @@ export class GateService {
     private readonly prisma: PrismaService,
     private readonly violationsService: ViolationsService,
     private readonly notificationsService: NotificationsService,
-  ) {}
+    private readonly attendanceService: AttendanceService,
+  ) { }
 
   // -----------------------------------------------------------------------
   // Gate Entries
@@ -219,6 +221,17 @@ export class GateService {
       }
     } catch (err: any) {
       this.logger.warn(`Notification dispatch failed: ${err?.message}`);
+    }
+
+    // 6. Auto-update attendance from gate entry (non-blocking)
+    try {
+      await this.attendanceService.upsertFromGateEntry(
+        dto.studentId,
+        dto.type as 'IN' | 'OUT',
+        new Date(),
+      );
+    } catch (err: any) {
+      this.logger.warn(`Attendance auto-update from gate failed: ${err?.message}`);
     }
 
     return this.findEntryById(result.entry.id);

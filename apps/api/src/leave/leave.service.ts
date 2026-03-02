@@ -9,6 +9,7 @@ import { Prisma, LeaveStatus, LeaveType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AttendanceService } from '../attendance/attendance.service';
 import { CreateLeaveRequestDto, ListLeaveQueryDto } from './dto';
 
 @Injectable()
@@ -19,6 +20,7 @@ export class LeaveService {
     private readonly prisma: PrismaService,
     private readonly whatsAppService: WhatsAppService,
     private readonly notificationsService: NotificationsService,
+    private readonly attendanceService: AttendanceService,
   ) { }
 
   /**
@@ -413,6 +415,35 @@ export class LeaveService {
         wardenId,
       },
     });
+
+    // Phase 7: Auto-mark attendance as ON_LEAVE for leave date range
+    try {
+      await this.attendanceService.markLeaveAttendance(
+        leave.studentId,
+        leave.fromDate,
+        leave.toDate,
+        id,
+      );
+    } catch (err: any) {
+      this.logger.warn(`Failed to mark leave attendance: ${err?.message}`);
+    }
+
+    // Gap 4: Auto-create GatePass for the leave date range
+    try {
+      await this.prisma.gatePass.create({
+        data: {
+          studentId: leave.studentId,
+          purpose: `Approved leave: ${leave.reason || leave.type}`,
+          validFrom: leave.fromDate,
+          validTo: leave.toDate,
+          status: 'ACTIVE',
+          approvedById: wardenId,
+        },
+      });
+      this.logger.log(`Auto-created GatePass for leave ${id}`);
+    } catch (err: any) {
+      this.logger.warn(`Failed to auto-create GatePass: ${err?.message}`);
+    }
 
     return this.findById(id);
   }

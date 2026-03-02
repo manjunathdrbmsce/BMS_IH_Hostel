@@ -22,6 +22,7 @@ import { AuditModule } from './audit/audit.module';
 import { RegistrationModule } from './registration/registration.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { AttendanceModule } from './attendance/attendance.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
     UploadsModule,
     DashboardModule,
     WhatsAppModule,
+    AttendanceModule,
     HealthModule,
   ],
   providers: [

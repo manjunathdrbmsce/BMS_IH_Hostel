@@ -1,502 +1,315 @@
-# BMS Hostel — Fix-All Implementation Plan
+# Dedicated Attendance Tracking System — Implementation Plan
 
-> Based on the [Implementation Assessment Report](file:///C:/Users/manju/.gemini/antigravity/brain/ca2603d5-5a3e-4e75-8932-90f2dc7c1a61/implementation_assessment.md)
+## Goal
 
-## Correction to Assessment
-
-> [!NOTE]
-> During plan research I discovered that the photo upload file filter is applied at the **module level** via `MulterModule.register()` in [uploads.module.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/uploads/uploads.module.ts) (lines 19–24), which validates JPG/PNG/WebP with a 2MB limit. The [uploadPhoto()](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/uploads/uploads.controller.ts#42-60) endpoint benefits from this filter even though it doesn't configure one itself. **C1 is mitigated.** The [uploadDocument()](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/uploads/uploads.controller.ts#96-114) endpoint overrides the module default with its own inline multer config (5MB, allowing PDF additionally).
->
-> Also, [.env](file:///d:/Apps/hostel/BMS_hostel/apps/api/.env) is properly gitignored (`.gitignore:13`). **M6 is not an issue** for VCS — but the file does exist on disk and should be kept out of deployment artifacts.
+Enterprise-grade, anti-proxy attendance tracking with warden-initiated sessions, dynamic rotating QR codes, device binding, and GPS geofence validation.
 
 ---
 
-## Issue Summary (Revised Priorities)
+## Architecture: Anti-Proxy Dual-Layer Verification
 
-| ID | Issue | Revised Severity | Sprint |
+```
+WARDEN                              BACKEND                         STUDENT
+  │                                    │                               │
+  ├─ "Start Roll-Call" ───────────────►├─ Create AttendanceSession     │
+  │                                    │   (5-min TTL, rotating QR)    │
+  │◄── Session QR (rotates 30s) ──────┤                               │
+  │                                    │                               │
+  │  [Displays on screen]              │    [Student opens app]        │
+  │                                    │◄──── POST /attendance/mark ──┤
+  │                                    │  { sessionToken, deviceFP,    │
+  │                                    │    gpsLat, gpsLng }           │
+  │                                    │                               │
+  │                                    ├─ Validate:                    │
+  │                                    │  1. Session active & token OK │
+  │                                    │  2. Device fingerprint match  │
+  │                                    │  3. GPS within hostel radius  │
+  │                                    │  4. Not already marked        │
+  │                                    │                               │
+  │◄── Live: "43/50 present" ────────┤─── ✅ PRESENT ───────────────►│
+```
+
+### Anti-Proxy Layers
+
+| Layer | Blocks | Bypass Difficulty |
+|---|---|:---:|
+| **Rotating QR (30s)** | Delayed screenshot sharing | Medium |
+| **Device Binding** | Scanning from friend's phone | Very Hard |
+| **GPS Geofence** | Scanning from outside campus | Very Hard |
+| **One-time use** | Re-scanning same token | Impossible |
+
+---
+
+## Lost Device Re-Bind Flow
+
+> [!IMPORTANT]
+> Device re-binding requires **warden/admin approval** to prevent students from registering a friend's phone.
+
+```
+Student                    Warden/Admin                     Backend
+  │                            │                               │
+  ├─ Logs in on new phone ────►│                               │
+  │                            │                               │
+  │  "Device not registered"   │                               │
+  │  [Request Re-bind] ───────►├─ Sees pending request ───────►│
+  │                            │  Student: Deepika Gopal       │
+  │                            │  Old: Samsung Galaxy A52      │
+  │                            │  New: iPhone 14               │
+  │                            │                               │
+  │                            ├─ [Approve] ──────────────────►├─ Deactivate old device
+  │                            │                               ├─ Bind new device
+  │◄─────── "Device bound" ───┤◄──────────────────────────────┤─ Audit log entry
+```
+
+- **First login ever** → auto-binds (no approval needed)  
+- **New device detected** → student sees "Request Device Change" → warden approves
+- **Audit trail** → all device changes logged with timestamps and approver
+
+---
+
+## Proposed Changes
+
+### Phase 1: Schema & Migration
+
+#### [MODIFY] [schema.prisma](file:///d:/Apps/hostel/BMS_hostel/apps/api/prisma/schema.prisma)
+
+**New models:**
+
+```prisma
+model DailyAttendance {
+  id         String           @id @default(uuid()) @db.Uuid
+  studentId  String           @map("student_id") @db.Uuid
+  date       DateTime         @db.Date
+  status     AttendanceStatus @default(UNKNOWN)
+  firstIn    DateTime?        @map("first_in")
+  lastOut    DateTime?        @map("last_out")
+  lastIn     DateTime?        @map("last_in")
+  isOnLeave  Boolean          @default(false) @map("is_on_leave")
+  leaveId    String?          @map("leave_id") @db.Uuid
+  sessionId  String?          @map("session_id") @db.Uuid
+  markedBy   String?          @map("marked_by") @db.Uuid
+  source     AttendanceSource @default(GATE)
+  gpsLat     Float?           @map("gps_lat")
+  gpsLng     Float?           @map("gps_lng")
+  deviceId   String?          @map("device_id") @db.Uuid
+  notes      String?          @db.Text
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  student    User              @relation("AttendanceStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  leave      LeaveRequest?     @relation("AttendanceLeave", fields: [leaveId], references: [id])
+  session    AttendanceSession? @relation(fields: [sessionId], references: [id])
+  marker     User?             @relation("AttendanceMarker", fields: [markedBy], references: [id])
+
+  @@unique([studentId, date])
+  @@index([date])
+  @@index([status])
+  @@map("daily_attendance")
+}
+
+model AttendanceSession {
+  id            String        @id @default(uuid()) @db.Uuid
+  hostelId      String        @map("hostel_id") @db.Uuid
+  createdById   String        @map("created_by_id") @db.Uuid
+  sessionSecret String        @map("session_secret") @db.VarChar(64)
+  title         String?       @db.VarChar(200)
+  startsAt      DateTime      @map("starts_at")
+  expiresAt     DateTime      @map("expires_at")
+  status        SessionStatus @default(ACTIVE)
+  gpsLat        Float         @map("gps_lat")
+  gpsLng        Float         @map("gps_lng")
+  gpsRadiusM    Int           @default(150) @map("gps_radius_m")
+  totalStudents Int           @default(0) @map("total_students")
+  presentCount  Int           @default(0) @map("present_count")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  hostel      Hostel             @relation(fields: [hostelId], references: [id])
+  createdBy   User               @relation("SessionCreator", fields: [createdById], references: [id])
+  attendance  DailyAttendance[]
+
+  @@index([hostelId, status])
+  @@index([expiresAt])
+  @@map("attendance_sessions")
+}
+
+model StudentDevice {
+  id              String       @id @default(uuid()) @db.Uuid
+  userId          String       @map("user_id") @db.Uuid
+  fingerprint     String       @db.VarChar(255)
+  deviceName      String?      @map("device_name") @db.VarChar(200)
+  platform        String?      @db.VarChar(50)
+  isActive        Boolean      @default(true) @map("is_active")
+  registeredAt    DateTime     @default(now()) @map("registered_at")
+  deactivatedAt   DateTime?    @map("deactivated_at")
+  deactivatedById String?      @map("deactivated_by_id") @db.Uuid
+
+  user          User  @relation("UserDevices", fields: [userId], references: [id], onDelete: Cascade)
+  deactivatedBy User? @relation("DeviceDeactivator", fields: [deactivatedById], references: [id])
+
+  @@index([userId, isActive])
+  @@index([fingerprint])
+  @@map("student_devices")
+}
+
+model DeviceChangeRequest {
+  id              String              @id @default(uuid()) @db.Uuid
+  userId          String              @map("user_id") @db.Uuid
+  newFingerprint  String              @map("new_fingerprint") @db.VarChar(255)
+  newDeviceName   String?             @map("new_device_name") @db.VarChar(200)
+  newPlatform     String?             @map("new_platform") @db.VarChar(50)
+  reason          String?             @db.Text
+  status          DeviceRequestStatus @default(PENDING)
+  reviewedById    String?             @map("reviewed_by_id") @db.Uuid
+  reviewedAt      DateTime?           @map("reviewed_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  user       User  @relation("DeviceRequester", fields: [userId], references: [id])
+  reviewedBy User? @relation("DeviceReviewer", fields: [reviewedById], references: [id])
+
+  @@index([userId, status])
+  @@map("device_change_requests")
+}
+
+enum AttendanceStatus { PRESENT  ABSENT  ON_LEAVE  LATE  UNKNOWN }
+enum AttendanceSource { GATE  QR_SCAN  ROLL_CALL  SYSTEM }
+enum SessionStatus    { ACTIVE  EXPIRED  CANCELLED }
+enum PresenceStatus   { IN_HOSTEL  OUT_CAMPUS  ON_LEAVE }
+enum DeviceRequestStatus { PENDING  APPROVED  REJECTED }
+```
+
+**Modify existing `BedAssignment`:** add `presenceStatus PresenceStatus @default(IN_HOSTEL)`
+
+---
+
+### Phase 2: Attendance Backend Module
+
+#### [NEW] [attendance.module.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/attendance/attendance.module.ts)
+
+NestJS module: imports PrismaModule, exports AttendanceService.
+
+#### [NEW] [attendance.service.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/attendance/attendance.service.ts)
+
+| Method | Purpose |
+|---|---|
+| `createSession(hostelId, createdById, gps, durationMin)` | Warden starts roll-call session with GPS anchor |
+| `getSessionQR(sessionId)` | Returns current 30s TOTP token for the session |
+| `markAttendance(sessionToken, studentId, deviceFP, gps)` | Validates all layers, marks PRESENT |
+| `validateDevice(userId, fingerprint)` | Checks device is bound and active |
+| `validateGPS(studentGps, sessionGps, radiusM)` | Haversine distance ≤ radius check |
+| `upsertFromGateEntry(studentId, type, timestamp)` | Auto-update attendance from gate IN/OUT |
+| `markLeaveAttendance(studentId, fromDate, toDate, leaveId)` | Bulk ON_LEAVE for approved leave days |
+| `getDailyAttendance(date, hostelId?)` | All records for a date |
+| `getStudentAttendance(studentId, from, to)` | Calendar data with percentage |
+| `getPresenceBoard(hostelId?)` | Real-time in/out/leave counts |
+| `getHostelSummary(hostelId, date)` | Aggregate stats |
+
+#### [NEW] [device.service.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/attendance/device.service.ts)
+
+| Method | Purpose |
+|---|---|
+| `registerDevice(userId, fingerprint, deviceName, platform)` | First-time auto-bind |
+| `requestDeviceChange(userId, newFP, deviceName, reason)` | Student requests re-bind |
+| `approveDeviceChange(requestId, reviewerId)` | Warden approves → deactivates old, binds new |
+| `rejectDeviceChange(requestId, reviewerId)` | Warden rejects |
+| `getActiveDevice(userId)` | Returns current bound device |
+| `getPendingRequests(hostelId?)` | Warden views pending re-bind requests |
+
+#### [NEW] [attendance.controller.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/attendance/attendance.controller.ts)
+
+| Endpoint | Method | Roles | Purpose |
 |---|---|---|---|
-| C2 | Uploads served publicly without auth | 🔴 Critical | 1 |
-| H1 | No password reset / forgot password | 🟠 High | 2 |
-| H2 | No role assign/revoke API endpoint | 🟠 High | 2 |
-| H3 | Dashboard N+1 loop queries | 🟠 High | 3 |
-| H4 | Token storage in localStorage (XSS risk) | 🟠 High | 2 |
-| H5 | Seed credentials in [.env.example](file:///d:/Apps/hostel/BMS_hostel/.env.example) | 🟠 High | 1 |
-| M1 | No email/SMS/push notification delivery | 🟡 Medium | 4 |
-| M2 | `user.roles?.includes()` fragile check | 🟡 Medium | 2 |
-| M4 | Dashboard bypasses module services | 🟡 Medium | 3 |
-| M5 | Mess Management completely absent | 🟡 Medium | 4 |
-| L1 | No manual violation creation endpoint | 🔵 Low | 4 |
-| L2 | Rate limiting may be too permissive | 🔵 Low | 1 |
-| L3 | Swagger vs Health version mismatch | 🔵 Low | 1 |
-| L4 | Redis provisioned but idle | 🔵 Low | 6 |
-| — | Mobile app is a stub shell | ⚠️ Stub | 5 |
+| `POST /attendance/session` | POST | Admin, Warden | Start attendance session |
+| `GET /attendance/session/:id/qr` | GET | Admin, Warden | Get current rotating QR |
+| `GET /attendance/session/:id/live` | GET | Admin, Warden | Live present count |
+| `POST /attendance/mark` | POST | Student | Student marks attendance |
+| `GET /attendance/daily` | GET | Admin, Warden | Daily records |
+| `GET /attendance/presence` | GET | Admin, Warden, Security | Presence board |
+| `GET /attendance/student/:id` | GET | Admin, Warden, Student, Parent | Per-student history |
+| `GET /attendance/my` | GET | Student | Own attendance + calendar |
+| `POST /attendance/device/register` | POST | Student | First-time device bind |
+| `POST /attendance/device/request-change` | POST | Student | Request re-bind |
+| `GET /attendance/device/pending` | GET | Admin, Warden | List pending re-bind requests |
+| `POST /attendance/device/:id/approve` | POST | Admin, Warden | Approve re-bind |
+| `POST /attendance/device/:id/reject` | POST | Admin, Warden | Reject re-bind |
+
+#### [NEW] [dto/index.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/attendance/dto/index.ts)
+
+DTOs: `CreateSessionDto`, `MarkAttendanceDto`, `RegisterDeviceDto`, `RequestDeviceChangeDto`, `ListAttendanceQueryDto`
 
 ---
 
-## Sprint 1 — Critical Security & Quick Fixes
+### Phase 3: Gate Integration
 
-> **Effort: ~1 day** | Focus: security hardening, zero new features
+#### [MODIFY] [gate.service.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/gate/gate.service.ts)
 
----
-
-### 1.1 Protect uploaded files with auth middleware
-
-Currently files under `/uploads/` are served statically by Express with no auth check. Any URL like `/uploads/photos/<uuid>.jpg` or `/uploads/documents/<uuid>.pdf` is public.
-
-#### [MODIFY] [main.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/main.ts)
-
-- Remove the `app.useStaticAssets(...)` call (lines 17-19)
-- File serving will be handled by a new authenticated route instead
-
-#### [NEW] `apps/api/src/uploads/uploads-serve.controller.ts`
-
-- Create a new `GET /uploads/:type/:filename` endpoint
-- Guard with `JwtAuthGuard`
-- Validate `:type` is `photos` or `documents`
-- Use `res.sendFile()` to stream the file from disk
-- Return 404 if file doesn't exist
-
-```typescript
-@Controller('uploads')
-@UseGuards(JwtAuthGuard)
-export class UploadsServeController {
-  @Get(':type/:filename')
-  serveFile(
-    @Param('type') type: string,
-    @Param('filename') filename: string,
-    @Res() res: Response,
-  ) {
-    // Validate type, sanitize filename (prevent path traversal),
-    // check file exists, send file
-  }
-}
-```
+In [createEntry()](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/gate/gate.controller.ts#49-53), after creating the gate entry, call:
+- `attendanceService.upsertFromGateEntry(studentId, type, timestamp)`
+- Update `BedAssignment.presenceStatus` → `IN_HOSTEL` on IN, `OUT_CAMPUS` on OUT
+- Auto-link active approved leave on gate OUT
 
 ---
 
-### 1.2 Remove hardcoded seed password from [.env.example](file:///d:/Apps/hostel/BMS_hostel/.env.example)
+### Phase 4: Leave Integration
 
-#### [MODIFY] [.env.example (root)](file:///d:/Apps/hostel/BMS_hostel/.env.example)
+#### [MODIFY] [leave.service.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/leave/leave.service.ts)
 
-```diff
--SEED_ADMIN_EMAIL=admin@bms.local
--SEED_ADMIN_PASSWORD=Admin@123456
-+SEED_ADMIN_EMAIL=admin@your-institution.edu
-+SEED_ADMIN_PASSWORD=CHANGE_ME_STRONG_PASSWORD
- SEED_ADMIN_FIRST_NAME=Super
- SEED_ADMIN_LAST_NAME=Admin
-```
-
-#### [MODIFY] [.env.example (api)](file:///d:/Apps/hostel/BMS_hostel/apps/api/.env.example)
-
-- Same change if those values are duplicated here
+In [wardenApprove()](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/leave/leave.service.ts#173-192), after status → `WARDEN_APPROVED`:
+- Call `attendanceService.markLeaveAttendance(studentId, fromDate, toDate, leaveId)`
+- Update `BedAssignment.presenceStatus` → `ON_LEAVE`
+- Auto-create `GatePass` for the leave date range
 
 ---
 
-### 1.3 Fix Swagger / Health version mismatch
+### Phase 5: Attendance Dashboard (Frontend)
 
-#### [MODIFY] [health.controller.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/health/health.controller.ts)
+#### [NEW] [page.tsx](file:///d:/Apps/hostel/BMS_hostel/apps/web/src/app/dashboard/attendance/page.tsx)
 
-```diff
--        version: '0.1.0',
-+        version: '0.2.0',
-```
+**4 tabs:**
 
----
+| Tab | Who Sees | Content |
+|---|---|---|
+| **Presence Board** | Admin, Warden | Real-time cards: In-Hostel / Out / On-Leave counts, student drill-down |
+| **Daily Records** | Admin, Warden | Date picker → table with Name, USN, Room, Status badges, timestamps |
+| **Roll-Call** | Warden | "Start Session" → shows QR + countdown timer + live student count |
+| **My Attendance** | Student | Calendar with colored days, attendance %, gate history timeline |
 
-### 1.4 Tighten rate limiting for sensitive endpoints
+**Roll-Call tab detail:**
+- Warden clicks "Start Roll-Call" → enters duration (default 5 min) → GPS auto-captured
+- Large QR code displayed (rotates every 30 seconds with countdown ring)
+- Live list below: students' names appear as they mark present ✅
+- Session auto-expires, remaining students marked ABSENT
 
-#### [MODIFY] [users.controller.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/users/users.controller.ts)
+**Student "My Attendance" tab:**
+- Calendar month view: 🟢 Present, 🔴 Absent, 🔵 On Leave, 🟡 Late
+- Attendance % bar with 75% threshold indicator
+- "Scan Attendance" button → opens camera → scans warden's session QR
 
-- Add `@Throttle({ default: { ttl: 60000, limit: 10 } })` to the [create()](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/notices/notices.controller.ts#41-45) and [remove()](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/users/users.controller.ts#88-92) methods
+**Device Management (Student profile area):**
+- Shows current bound device name
+- "Request Device Change" button if on unregistered device
 
-#### [MODIFY] [registration.controller.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/registration/registration.controller.ts)
+#### [MODIFY] [constants.ts](file:///d:/Apps/hostel/BMS_hostel/apps/web/src/lib/constants.ts)
 
-- Add `@Throttle({ default: { ttl: 60000, limit: 5 } })` to [submitRegistration()](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/registration/registration.controller.ts#83-91) and [reviewRegistration()](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/registration/registration.controller.ts#162-170)
-
----
-
-## Sprint 2 — High-Priority Auth & RBAC Gaps
-
-> **Effort: ~2–3 days** | Focus: password reset, role management API, fix fragile role checks
-
----
-
-### 2.1 Password Reset Flow
-
-#### [NEW] `apps/api/src/auth/dto/forgot-password.dto.ts`
-
-```typescript
-export class ForgotPasswordDto {
-  @IsString() identifier: string; // email or mobile
-}
-```
-
-#### [NEW] `apps/api/src/auth/dto/reset-password.dto.ts`
-
-```typescript
-export class ResetPasswordDto {
-  @IsString() token: string;
-  @IsString() @MinLength(8) newPassword: string;
-}
-```
-
-#### [MODIFY] [auth.controller.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/auth/auth.controller.ts)
-
-Add two new endpoints:
-
-- `POST /auth/forgot-password` — Public, throttled (3/min). Looks up user by identifier, generates a time-limited reset token (stored hashed in a new `PasswordResetToken` table or repurpose a signed JWT with short expiry + special claim). In Phase 1 (no email), returns the token in the response for dev/testing. In production, this would send an email.
-- `POST /auth/reset-password` — Public, throttled. Validates reset token, updates `passwordHash`, revokes all refresh tokens.
-
-#### [MODIFY] [auth.service.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/auth/auth.service.ts)
-
-- Add `forgotPassword(identifier)` and `resetPassword(token, newPassword)` methods
-
-#### [MODIFY] [auth/dto/index.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/auth/dto)
-
-- Export the new DTOs
-
-> [!IMPORTANT]
-> Since email delivery (Sprint 4) is not yet implemented, the forgot-password endpoint will return the reset token directly in the response body for development, with a clear log warning. When email is wired, this response will be removed and the token sent via email only.
-
----
-
-### 2.2 Role Assign/Revoke API
-
-#### [NEW] `apps/api/src/users/roles.controller.ts`
-
-```typescript
-@Controller('users/:userId/roles')
-@UseGuards(JwtAuthGuard, RolesGuard)
-export class UserRolesController {
-  @Post()
-  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN')
-  assignRole(@Param('userId') userId, @Body() dto: AssignRoleDto) { ... }
-
-  @Delete(':roleId')
-  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN')
-  revokeRole(@Param('userId') userId, @Param('roleId') roleId) { ... }
-
-  @Get()
-  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN')
-  listRoles(@Param('userId') userId) { ... }
-}
-```
-
-#### [NEW] `apps/api/src/users/dto/assign-role.dto.ts`
-
-```typescript
-export class AssignRoleDto {
-  @IsUUID() roleId: string;
-  @IsOptional() @IsUUID() hostelId?: string; // For scoped roles
-}
-```
-
-#### [MODIFY] [users.module.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/users/users.module.ts)
-
-- Register `UserRolesController`
-
-#### [MODIFY] [users.service.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/users/users.service.ts)
-
-- Add `assignRole()`, `revokeRole()`, `listUserRoles()` methods
-- Enforce: system roles can't be revoked if they're the last SUPER_ADMIN
-- Audit-log role changes
-
----
-
-### 2.3 Fix fragile `user.roles?.includes()` pattern
-
-The JWT payload should be the single source of truth for roles. The issue is in controllers that check `user.roles?.includes('STUDENT')` — if the JWT strategy doesn't populate `roles` as a flat string array, this silently fails.
-
-#### [MODIFY] [auth/strategies/jwt.strategy.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/auth/strategies)
-
-- Verify the `validate()` method returns `{ id, email, roles: string[], permissions: string[] }` consistently
-- Add explicit TypeScript type for the return value
-
-#### [MODIFY] Multiple controllers (leave, complaints, violations)
-
-- Replace `user.roles?.includes('STUDENT')` with a helper function:
-
-```typescript
-// Add to auth/decorators or a shared utility
-export function hasRole(user: any, role: string): boolean {
-  return Array.isArray(user.roles) && user.roles.includes(role);
-}
-```
-
-Files to update:
-- `leave.controller.ts:52,78`
-- `complaints.controller.ts:53,78`
-- `violations.controller.ts:79,97`
-
----
-
-### 2.4 Migrate token storage from localStorage to httpOnly cookies
-
-#### [MODIFY] [auth.controller.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/auth/auth.controller.ts)
-
-- In [login()](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/auth/auth.controller.ts#40-51) and [refresh()](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/auth/auth.controller.ts#76-87), set `refreshToken` as an httpOnly, Secure, SameSite=Strict cookie instead of returning in the body
-- Access token can remain in the response body (short-lived)
-- In [logout()](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/auth/auth.controller.ts#95-109), clear the cookie
-- Add `@Res({ passthrough: true })` to response handlers
-
-#### [MODIFY] [auth.service.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/auth/auth.service.ts)
-
-- [refresh()](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/auth/auth.controller.ts#76-87) reads token from cookie header instead of request body
-
-#### [MODIFY] Web frontend
-
-- Update `apps/web/src/lib/` API client to stop storing refreshToken in localStorage
-- Send credentials with `credentials: 'include'` for cookie-based refresh
-
-> [!WARNING]
-> This is a **breaking change** for both web and mobile clients. The mobile app will need a separate mechanism (secure storage). Consider making this opt-in via env var `USE_COOKIE_AUTH=true` so both modes can coexist during the transition.
-
----
-
-## Sprint 3 — Performance Fixes
-
-> **Effort: ~1 day** | Fix dashboard N+1, introduce module service delegation
-
----
-
-### 3.1 Fix Dashboard N+1 and Module Encapsulation
-
-#### [NEW] `apps/api/src/dashboard/dashboard.service.ts`
-
-Move all query logic from `dashboard.controller.ts` into a proper service:
-- Replace the 7-iteration login trend loop with a single `GROUP BY DATE()` raw query
-- Aggregate module stats by calling each module's existing `.getStats()` service method (hostels, allotments, leave, complaints, notices, gate, violations) instead of direct Prisma queries
-- Cache dashboard results in memory for 30 seconds (simple in-memory cache, no Redis needed yet)
-
-#### [MODIFY] [dashboard.controller.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/dashboard/dashboard.controller.ts)
-
-- Reduce to a thin controller that delegates to `DashboardService`
-- Remove direct `PrismaService` injection from the controller
-
-#### [MODIFY] [dashboard.module.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/dashboard/dashboard.module.ts)
-
-- Import dependent modules' services (or re-export stats endpoints)
-- Register `DashboardService`
-
-```typescript
-// Replace the login trend loop:
-const loginTrend = await this.prisma.$queryRaw`
-  SELECT DATE(created_at) as date, COUNT(*) as logins
-  FROM audit_logs
-  WHERE action = 'LOGIN'
-    AND created_at >= ${weekAgo}
-  GROUP BY DATE(created_at)
-  ORDER BY DATE(created_at)
-`;
-```
-
----
-
-## Sprint 4 — Medium Features
-
-> **Effort: ~3–5 days** | Notification delivery, Mess module, manual violations
-
----
-
-### 4.1 Wire Email Notification Delivery
-
-#### [NEW] `apps/api/src/notifications/channels/email.channel.ts`
-
-- Use `nodemailer` (add to dependencies)
-- Read SMTP config from env vars
-- `send(to, subject, html)` method
-- Fire-and-forget pattern (log errors, don't fail the request)
-
-#### [MODIFY] [notifications.service.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/notifications/notifications.service.ts)
-
-- After creating `Notification` record, check channel
-- If `EMAIL` → dispatch via `EmailChannel`
-- Update `state` to `SENT` or `FAILED`
-
-#### [NEW] `apps/api/src/notifications/channels/sms.channel.ts`
-
-- Stub with a `console.log` and `SKIPPED` state for Phase 1
-- Wiring Razorpay SMS or MSG91 will come later
-
-#### Dependencies to add:
-
-```bash
-pnpm --filter api add nodemailer
-pnpm --filter api add -D @types/nodemailer
-```
-
----
-
-### 4.2 Mess Management Module (Scaffold)
-
-> [!IMPORTANT]
-> The Mess module was documented in the architecture but has zero code. The schema also has no `Mess`-related models. This is a significant feature gap. I recommend we **scaffold the module structure with CRUD stubs** but defer full business logic until you define mess requirements more clearly.
-
-#### [NEW] `apps/api/src/mess/mess.module.ts`
-#### [NEW] `apps/api/src/mess/mess.controller.ts`
-#### [NEW] `apps/api/src/mess/mess.service.ts`
-#### [NEW] `apps/api/src/mess/dto/index.ts`
-
-Stub endpoints:
-- `POST /mess/menu` — Create daily menu
-- `GET /mess/menu` — List menus
-- `POST /mess/attendance` — Scan meal (mess attendance)
-- `GET /mess/attendance` — List attendance
-- `GET /mess/stats` — Mess statistics
-
-#### Prisma schema additions:
-- `MessMenu` model (date, mealType, items)
-- `MessAttendance` model (studentId, date, mealType, scannedById)
-- Add migration
-
-#### [MODIFY] [app.module.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/app.module.ts)
-
-- Import `MessModule`
-
----
-
-### 4.3 Manual Violation Creation
-
-#### [MODIFY] [violations.controller.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/violations/violations.controller.ts)
-
-- Add `POST /violations` for SUPER_ADMIN, HOSTEL_ADMIN, WARDEN to manually create a violation (e.g., for incidents not captured by gate scan)
-
-#### [NEW] `apps/api/src/violations/dto/create-violation.dto.ts`
-
----
-
-## Sprint 5 — Mobile App Foundation
-
-> **Effort: ~3–5 days** | Build out essential student-facing screens
-
-This sprint depends on the mobile app requirements. The current shell has only login. Recommended minimum feature set:
-
-#### [MODIFY] `apps/mobile/app/`
-
-Add screens:
-- `/dashboard` — Student dashboard (my room, my violations count, pending leave)
-- `/leave/new` — Submit leave request
-- `/leave/list` — My leave requests
-- `/notices` — View notices
-- `/complaints/new` — File complaint
-- `/profile` — My profile + guardian info
-- `/gate` — My gate activity (if student has QR code)
-
-#### [NEW] `apps/mobile/lib/api.ts`
-
-- Axios/fetch wrapper pointing to `APP_URL/api/v1`
-- Token storage using `expo-secure-store` (not AsyncStorage/localStorage)
-
-> [!IMPORTANT]
-> Before starting Sprint 5, we should clarify: **what is the primary mobile user role?** If it's students only, the above is sufficient. If wardens/security also use mobile (e.g., for gate scanning), we need role-based navigation and a camera/QR scanner integration.
-
----
-
-## Sprint 6 — Infrastructure
-
-> **Effort: ~2 days** | Wire Redis, BullMQ, prep for S3
-
----
-
-### 6.1 Wire BullMQ for Async Audit Logging
-
-#### [NEW] `apps/api/src/audit/audit.processor.ts`
-
-- BullMQ worker that reads audit events from queue and writes to DB
-- Replace synchronous audit writes with queue dispatch
-
-#### [MODIFY] [audit.service.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/audit)
-
-- `log()` method enqueues instead of direct DB write
-
-#### [MODIFY] [app.module.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/app.module.ts)
-
-- Register `BullModule.forRoot({ connection: { host, port, password } })` using Redis env vars
-
-> Dependencies already installed: `bullmq@5.70.1`, `@nestjs/bullmq@11.0.4`, `ioredis@5.9.3`
-
----
-
-### 6.2 S3-Compatible Storage Abstraction
-
-#### [NEW] `apps/api/src/uploads/storage.service.ts`
-
-- Interface: `upload(buffer, key)`, `getUrl(key)`, `delete(key)`
-- Local implementation (current behavior) as default
-- S3 implementation (MinIO/AWS) behind env-var toggle
-
-#### [MODIFY] [uploads.controller.ts](file:///d:/Apps/hostel/BMS_hostel/apps/api/src/uploads/uploads.controller.ts)
-
-- Inject `StorageService` instead of relying on disk paths
-- On `uploadPhoto`/`uploadDocument`, pipe file buffer → `StorageService.upload()`
-
----
-
-## Sprint 7 — Polish
-
-> **Effort: ~1 day** | Version consistency, docs, cleanup
-
-- Align all version strings (`package.json`, Swagger, Health) to `0.3.0`
-- Update `docs/architecture.md` to reflect Sprint 4–6 additions (Mess, BullMQ, S3)
-- Add `CHANGELOG.md`
-- Ensure all `.env.example` vars match the new additions (SMTP, SMS, S3)
-- Run `pnpm lint` and fix any warnings
+Add `ATTENDANCE_STATUSES`, `PRESENCE_STATUSES`, `SESSION_STATUSES`, sidebar nav entry.
 
 ---
 
 ## Verification Plan
 
 ### Automated Tests
-
-**Existing tests:**
-- `apps/api/src/auth/auth.service.spec.ts` — 10 unit tests covering login, logout, profile, signup
-- `apps/api/test/auth.e2e-spec.ts` — E2E auth tests
-
-**Commands to run existing tests:**
-```bash
-# Unit tests
-pnpm --filter api test
-
-# E2E tests (requires running DB with seed data)
-pnpm --filter api test:e2e
-```
-
-**New tests to write:**
-
-| Sprint | Test | Type | File |
-|---|---|---|---|
-| S1 | Upload serve auth test — verify 401 without token | E2E | `test/uploads.e2e-spec.ts` |
-| S1 | Upload serve — verify path traversal is blocked (`../../etc/passwd`) | Unit | `uploads-serve.controller.spec.ts` |
-| S2 | Forgot password — verify token generation + reset | Unit | `auth.service.spec.ts` (extend existing) |
-| S2 | Role assign — verify assign, duplicate check, revoke | Unit | `users.service.spec.ts` |
-| S2 | `hasRole()` helper — verify with missing/empty/valid roles | Unit | `auth/helpers.spec.ts` |
-| S3 | Dashboard service — verify no N+1 for login trend | Unit | `dashboard.service.spec.ts` |
+1. Create session → verify rotating QR changes every 30 seconds
+2. Mark attendance with correct device + GPS → ✅ PRESENT
+3. Mark attendance with wrong device → ❌ rejected
+4. Mark attendance outside GPS radius → ❌ rejected
+5. Mark attendance after session expires → ❌ rejected
+6. Mark attendance twice → ❌ already marked
+7. Device re-bind: request → approve → verify new device works
+8. Gate IN/OUT → verify DailyAttendance auto-created
+9. Leave approved → verify ON_LEAVE records for date range
 
 ### Manual Verification
-
-After each sprint, verify in the browser via Swagger (`http://localhost:3001/api/docs`):
-
-1. **Sprint 1:** Try accessing `/uploads/photos/<any-file>` without Authorization header → should get 401
-2. **Sprint 2:** Test forgot-password + reset-password flow via Swagger; test role assign/revoke via `POST/DELETE /users/:id/roles`
-3. **Sprint 3:** Call `GET /dashboard/stats` and verify response time is under 500ms (vs current which may spike with data)
-4. **Sprint 4:** After wiring email, trigger a leave approval and verify email is sent (check SMTP logs or MailHog)
-
----
-
-## Execution Order Summary
-
-```
-Sprint 1 (Day 1)     → Security hardening, quick fixes
-Sprint 2 (Days 2-4)  → Auth gaps (password reset, role API, cookie auth)
-Sprint 3 (Day 5)     → Dashboard performance
-Sprint 4 (Days 6-10) → Notifications, Mess scaffold, manual violations
-Sprint 5 (Days 11-15)→ Mobile app foundation
-Sprint 6 (Days 16-17)→ Redis/BullMQ, S3 abstraction
-Sprint 7 (Day 18)    → Polish and versioning
-```
-
-**Total estimated effort: ~18 working days (3.5 weeks)**
-
-> [!IMPORTANT]
-> I recommend we execute **Sprint 1 first** since it's pure security fixes with no behavior changes, then proceed to Sprint 2. Each sprint can be reviewed and approved independently.
+1. Warden starts session → QR displays, countdown works
+2. Student scans QR → attendance marked, count updates live
+3. Lost device flow: student requests re-bind, warden approves
+4. Student calendar shows correct daily statuses
+5. Presence board shows real-time counts

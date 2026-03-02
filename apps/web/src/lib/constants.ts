@@ -123,6 +123,12 @@ export const NAV_SECTIONS: NavSection[] = [
         roles: ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'SECURITY_GUARD'],
       },
       {
+        label: 'Attendance',
+        href: '/dashboard/attendance',
+        icon: 'ClipboardCheck',
+        roles: ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT', 'PARENT'],
+      },
+      {
         label: 'Violations',
         href: '/dashboard/violations',
         icon: 'ShieldAlert',
@@ -388,4 +394,32 @@ export const WIZARD_STEPS = [
   'Address & Guardian',
   'Documents',
   'Declarations',
+] as const;
+
+// ── Attendance Tracking ─────────────────────────────────────────────────────
+
+export const ATTENDANCE_STATUSES = [
+  { value: 'PRESENT', label: 'Present', color: '#22c55e' },
+  { value: 'ABSENT', label: 'Absent', color: '#ef4444' },
+  { value: 'ON_LEAVE', label: 'On Leave', color: '#3b82f6' },
+  { value: 'LATE', label: 'Late', color: '#eab308' },
+  { value: 'UNKNOWN', label: 'Unknown', color: '#9ca3af' },
+] as const;
+
+export const PRESENCE_STATUSES = [
+  { value: 'IN_HOSTEL', label: 'In Hostel', color: '#22c55e' },
+  { value: 'OUT_CAMPUS', label: 'Out Campus', color: '#f97316' },
+  { value: 'ON_LEAVE', label: 'On Leave', color: '#3b82f6' },
+] as const;
+
+export const SESSION_STATUSES = [
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'EXPIRED', label: 'Expired' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+] as const;
+
+export const DEVICE_REQUEST_STATUSES = [
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'REJECTED', label: 'Rejected' },
 ] as const;

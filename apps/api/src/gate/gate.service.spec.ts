@@ -4,6 +4,7 @@ import { GateService } from './gate.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ViolationsService } from '../violations/violations.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AttendanceService } from '../attendance/attendance.service';
 import { GateEntryType, GatePassStatus } from '@prisma/client';
 
 // ---------------------------------------------------------------------------
@@ -41,6 +42,10 @@ const mockViolationsService = {
 const mockNotificationsService = {
   notifyParents: jest.fn(),
   notifyWardens: jest.fn(),
+};
+
+const mockAttendanceService = {
+  upsertFromGateEntry: jest.fn(),
 };
 
 const mockEntry = {
@@ -87,6 +92,7 @@ describe('GateService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: ViolationsService, useValue: mockViolationsService },
         { provide: NotificationsService, useValue: mockNotificationsService },
+        { provide: AttendanceService, useValue: mockAttendanceService },
       ],
     }).compile();
     service = module.get<GateService>(GateService);

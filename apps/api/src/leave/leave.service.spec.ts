@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { LeaveService } from './leave.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { AttendanceService } from '../attendance/attendance.service';
 import { LeaveType, LeaveStatus } from '@prisma/client';
 
 // ---------------------------------------------------------------------------
@@ -19,6 +22,8 @@ const mockPrisma = {
   user: { findUnique: jest.fn() },
   hostel: { findUnique: jest.fn() },
   buildingPolicy: { findFirst: jest.fn() },
+  bedAssignment: { findFirst: jest.fn(), updateMany: jest.fn() },
+  guardianLink: { findMany: jest.fn() },
 };
 
 const mockLeave = {
@@ -53,6 +58,9 @@ describe('LeaveService', () => {
       providers: [
         LeaveService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: WhatsAppService, useValue: { sendTemplateMessage: jest.fn() } },
+        { provide: NotificationsService, useValue: { notifyParents: jest.fn(), notifyWardens: jest.fn() } },
+        { provide: AttendanceService, useValue: { markLeaveAttendance: jest.fn() } },
       ],
     }).compile();
     service = module.get<LeaveService>(LeaveService);
@@ -63,8 +71,12 @@ describe('LeaveService', () => {
   // -----------------------------------------------------------------------
   describe('create', () => {
     it('should create a leave request', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-1' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-1', firstName: 'Arjun', lastName: 'Kumar', email: 'a@b.com', usn: '1BM22CS001' });
       mockPrisma.hostel.findUnique.mockResolvedValue({ id: 'h-1', building: { id: 'b-1' } });
+      mockPrisma.bedAssignment.findFirst.mockResolvedValue({
+        bed: { id: 'bed-1', bedNo: 'A1', room: { id: 'r-1', roomNo: '101', floor: 1, hostel: { id: 'h-1', code: 'KR', name: 'Krishna' } } },
+      });
+      mockPrisma.guardianLink.findMany.mockResolvedValue([]);
       mockPrisma.leaveRequest.findFirst.mockResolvedValue(null); // no overlapping
       mockPrisma.buildingPolicy.findFirst.mockResolvedValue({ maxLeaveDays: 30 });
       mockPrisma.leaveRequest.create.mockResolvedValue(mockLeave);
@@ -80,15 +92,22 @@ describe('LeaveService', () => {
 
     it('should throw if student not found', async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.bedAssignment.findFirst.mockResolvedValue(null);
+      mockPrisma.guardianLink.findMany.mockResolvedValue([]);
       await expect(service.create({
         studentId: 'bad', hostelId: 'h-1', type: 'HOME',
         fromDate: '2025-03-01', toDate: '2025-03-03', reason: 'test',
-      })).rejects.toThrow(NotFoundException);
+      })).rejects.toThrow(BadRequestException);
     });
 
     it('should throw if toDate before fromDate', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-1' });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-1', firstName: 'Arjun', lastName: 'Kumar', email: 'a@b.com', usn: '1BM22CS001' });
       mockPrisma.hostel.findUnique.mockResolvedValue({ id: 'h-1', building: { id: 'b-1' } });
+      mockPrisma.bedAssignment.findFirst.mockResolvedValue({
+        bed: { id: 'bed-1', bedNo: 'A1', room: { id: 'r-1', roomNo: '101', floor: 1, hostel: { id: 'h-1', code: 'KR', name: 'Krishna' } } },
+      });
+      mockPrisma.guardianLink.findMany.mockResolvedValue([]);
+      mockPrisma.leaveRequest.findFirst.mockResolvedValue(null);
       await expect(service.create({
         studentId: 'u-1', hostelId: 'h-1', type: 'HOME',
         fromDate: '2025-03-05', toDate: '2025-03-01', reason: 'test',
@@ -193,13 +212,13 @@ describe('LeaveService', () => {
       mockPrisma.leaveRequest.count
         .mockResolvedValueOnce(5)  // pending
         .mockResolvedValueOnce(3)  // parent approved
+        .mockResolvedValueOnce(1)  // parent rejected
         .mockResolvedValueOnce(10) // warden approved
         .mockResolvedValueOnce(2)  // rejected
-        .mockResolvedValueOnce(1)  // cancelled
-        .mockResolvedValueOnce(21); // total
+        .mockResolvedValueOnce(1); // cancelled
 
       const result = await service.getStats();
-      expect(result).toEqual({ pending: 5, parentApproved: 3, wardenApproved: 10, rejected: 2, cancelled: 1, total: 21 });
+      expect(result).toEqual({ pending: 5, parentApproved: 3, parentRejected: 1, wardenApproved: 10, rejected: 2, cancelled: 1, total: 22 });
     });
   });
 });
