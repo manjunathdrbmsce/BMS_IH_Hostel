@@ -2,10 +2,51 @@
   "expo": {
     "name": "BMS Hostel",
     "slug": "bms-hostel",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "bms-hostel",
-    "platforms": ["ios", "android"],
-    "newArchEnabled": true
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "BMS Hostel needs camera access to scan QR codes for attendance."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "BMS Hostel uses your location to verify attendance proximity.",
+          "locationWhenInUsePermission": "BMS Hostel uses your location to verify attendance proximity."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "BMS Hostel needs photo access to attach images to complaints."
+        }
+      ]
+    ],
+    "android": {
+      "package": "com.anonymous.bmshostel",
+      "adaptiveIcon": {
+        "backgroundColor": "#4F46E5"
+      },
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_MEDIA_IMAGES",
+        "VIBRATE",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ]
+    }
   }
 }

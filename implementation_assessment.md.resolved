@@ -1,6 +1,6 @@
 # BMS Hostel Platform — Current Implementation Assessment Report
 
-> **Generated:** 2026-03-01 | **Scope:** Full repo (`d:\Apps\hostel\BMS_hostel`) end-to-end
+> **Generated:** 2026-03-01 | **Reassessed:** 2026-03-03 | **Scope:** Full repo (`d:\Apps\hostel\BMS_hostel`) end-to-end
 > **Analyst:** Antigravity (no code was modified)
 
 ---
@@ -12,15 +12,17 @@ The BMS Hostel Platform is a Turborepo monorepo containing a **NestJS REST API**
 **What is solidly implemented (production-ready API layer):**
 - Full JWT auth with refresh-token rotation and reuse detection (`apps/api/src/auth`)
 - 11-role RBAC via `JwtAuthGuard` + `RolesGuard` + `PermissionsGuard` applied to all protected routes
-- 19 backend modules are wired and importable; all controllers have real service calls backed by Prisma
-- Prisma schema is fully designed across 6 phases — 20 models, all migrated
+- **21 backend modules** are wired and importable (up from 19); new: `AttendanceModule`, `WhatsAppModule`
+- Prisma schema is fully designed across **7 phases — 26 models** (up from 20), all migrated
 - Comprehensive audit logging via `AuditInterceptor` on every mutating endpoint
 - Dashboard stats endpoint pulling live data across all modules
+- **Enterprise-grade attendance system** — roll-call sessions with rotating QR codes, GPS geo-fencing, device binding (anti-proxy), gate-to-attendance auto-linking, leave-to-attendance auto-marking, cron-based session expiry
+- **WhatsApp notification delivery** via Twilio — parent leave approval/rejection via interactive YES/NO quick-replies
 
 **What is stub/partial:**
 - The **web UI** (`apps/web`) has a full dashboard shell with 16 sub-sections, but the `dashboard/page.tsx` is a large single-file implementation — it needs verification whether all 16 sections hit the API or use mock data
 - The **mobile app** (`apps/mobile`) has only 3 screens: `_layout.tsx`, `index.tsx`, `login.tsx` — it is a placeholder shell
-- **Notifications are stored in DB** but no email/SMS/push delivery is implemented (channels: EMAIL, SMS, PUSH all in schema but no transport wired)
+- **Notifications are stored in DB** — WhatsApp delivery is now implemented via Twilio for leave approvals; Email/SMS/Push channels still not wired
 - **Payment integration** (Razorpay) is commented out in `.env.example` — not implemented
 - **File uploads** use local `diskStorage` (`uploads/` folder on disk), not S3-compatible cloud storage
 - **Redis is provisioned** (docker-compose.yml) but **not consumed** — no BullMQ queues, no caching in Phase 1
@@ -66,9 +68,9 @@ The BMS Hostel Platform is a Turborepo monorepo containing a **NestJS REST API**
 | `pnpm-workspace.yaml` | Workspace = `apps/*`, `packages/*` |
 | `docker-compose.yml` | PostgreSQL 5432, Redis 6379 |
 | `.env.example` (root + `apps/api`) | All env var keys documented |
-| `apps/api/prisma/schema.prisma` | 1053-line schema, single source of DB truth |
+| `apps/api/prisma/schema.prisma` | 1247-line schema (up from 1053), single source of DB truth |
 | `apps/api/src/main.ts` | Global prefix `/api/v1`, Helmet, CORS, ValidationPipe, Swagger |
-| `apps/api/src/app.module.ts` | 19 modules registered |
+| `apps/api/src/app.module.ts` | 21 modules registered (up from 19) |
 
 ### How to Run Locally
 
@@ -108,6 +110,7 @@ Default super-admin: `admin@bms.local` / `Admin@123456`
 │  auth       users      hostels    buildings   policies   students    │
 │  allotments leave      complaints notices     gate       violations  │
 │  notifications  registration  uploads  dashboard  audit   health     │
+│  attendance   whatsapp                                                │
 │                                                                      │
 │  Cross-cutting: JwtAuthGuard → RolesGuard → AuditInterceptor        │
 └──────────────────────────┬──────────────────────────────────────────┘
@@ -115,7 +118,7 @@ Default super-admin: `admin@bms.local` / `Admin@123456`
         ┌──────────────────┼─────────────────┐
         ▼                  ▼                 ▼
    PostgreSQL:5432     Redis:6379         uploads/
-   (20 models)         (provisioned,      (local disk,
+   (26 models)         (provisioned,      (local disk,
    Migrations done     not consumed)      no S3 yet)
 ```
 
@@ -206,13 +209,51 @@ POST /auth/logout (JwtAuthGuard)
 
 | Feature | Endpoints | Status | Evidence |
 |---|---|---|---|
-| Student submits leave | `POST /leave` | ✅ Implemented | `leave.controller.ts:36` |
-| List/view leave requests | `GET /leave`, `GET /leave/:id` | ✅ Implemented | `leave.controller.ts:46,70` |
-| Parent approves | `POST /leave/:id/parent-approve` | ✅ Implemented | `leave.controller.ts:86` |
-| Warden approves | `POST /leave/:id/warden-approve` | ✅ Implemented | `leave.controller.ts:99` |
-| Reject leave | `POST /leave/:id/reject` | ✅ Implemented | `leave.controller.ts:112` |
-| Cancel leave | `POST /leave/:id/cancel` | ✅ Implemented | `leave.controller.ts:126` |
-| Leave stats | `GET /leave/stats` | ✅ Implemented | `leave.controller.ts:61` |
+| Student submits leave | `POST /leave` | ✅ Implemented | `leave.controller.ts:42` — auto-sends WhatsApp to parents |
+| Check eligibility | `GET /leave/eligibility` | ✅ **NEW** | `leave.controller.ts:51` — validates hostel, guardian, room prereqs |
+| List/view leave requests | `GET /leave`, `GET /leave/:id` | ✅ Implemented | Uses `hasRole()` helper for scoping |
+| Parent approves | `POST /leave/:id/parent-approve` | ✅ Implemented | `leave.controller.ts:102` |
+| Parent rejects | `POST /leave/:id/parent-reject` | ✅ **NEW** | `leave.controller.ts:115` |
+| Warden approves | `POST /leave/:id/warden-approve` | ✅ Implemented | Enforces parent-first; auto-marks attendance ON_LEAVE |
+| Reject leave | `POST /leave/:id/reject` | ✅ Implemented | `leave.controller.ts:141` |
+| Cancel leave | `POST /leave/:id/cancel` | ✅ Implemented | `leave.controller.ts:155` |
+| Leave stats | `GET /leave/stats` | ✅ Implemented | `leave.controller.ts:76` |
+| WhatsApp parent notification | (internal) | ✅ **NEW** | `leave.service.ts:219–283` — Twilio to all guardians |
+| Leave→Attendance linking | (internal) | ✅ **NEW** | Calls `attendanceService.markLeaveAttendance()` on approval |
+
+#### Attendance Tracking *(Phase 7 — NEW)*
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| Create roll-call session | `POST /attendance/sessions` | ✅ **NEW** | GPS anchor, TTL, rotating secret |
+| Get session QR token | `GET /attendance/sessions/:id/qr` | ✅ **NEW** | HMAC-rotated every 30s |
+| Get live session stats | `GET /attendance/sessions/:id/live` | ✅ **NEW** | Present/total counts |
+| Cancel session | `POST /attendance/sessions/:id/cancel` | ✅ **NEW** | Warden action |
+| List active sessions | `GET /attendance/sessions/active` | ✅ **NEW** | For student UI |
+| Mark attendance (QR scan) | `POST /attendance/mark` | ✅ **NEW** | 4-layer: session+token+device+GPS |
+| Daily attendance list | `GET /attendance/daily` | ✅ **NEW** | Filtered, paginated |
+| Real-time presence board | `GET /attendance/presence-board` | ✅ **NEW** | By-status counts |
+| Hostel attendance summary | `GET /attendance/hostel/:hostelId/summary` | ✅ **NEW** | Per-date summary |
+| Student history | `GET /attendance/student/:id` | ✅ **NEW** | Calendar data |
+| My attendance (student) | `GET /attendance/my` | ✅ **NEW** | Student self-view |
+| Register device | `POST /attendance/devices/register` | ✅ **NEW** | Auto-bind first use |
+| Get my device | `GET /attendance/devices/my` | ✅ **NEW** | Active device info |
+| Request device change | `POST /attendance/devices/change-request` | ✅ **NEW** | Lost/new phone |
+| List device requests | `GET /attendance/devices/requests` | ✅ **NEW** | Warden review |
+| Approve/Reject device | `POST .../approve`, `POST .../reject` | ✅ **NEW** | Warden action |
+| Auto-mark from gate | (internal) | ✅ **NEW** | `GateService` → `AttendanceService.upsertFromGateEntry()` |
+| Cron session expiry | (scheduler) | ✅ **NEW** | `@Cron(EVERY_MINUTE)` — auto-expires & marks ABSENT |
+| Unit tests | — | ✅ **NEW** | `attendance.service.spec.ts`, `device.service.spec.ts` |
+
+#### WhatsApp Notification Module *(NEW)*
+
+| Feature | Endpoints | Status | Evidence |
+|---|---|---|---|
+| Send plain message | (service) | ✅ **NEW** | Twilio API; dev-mode console fallback |
+| Leave approval request | (service) | ✅ **NEW** | Interactive YES/NO quick-reply buttons |
+| Webhook verification | `GET /webhooks/whatsapp` | ✅ **NEW** | `whatsapp.controller.ts:45` |
+| Inbound message handler | `POST /webhooks/whatsapp` | ✅ **NEW** | Parent YES/NO → auto leave approve/reject |
+| Content Template mgmt | (service) | ✅ **NEW** | Auto-creates Twilio Content Template on startup |
 
 #### Gate Management
 
@@ -289,7 +330,8 @@ POST /auth/logout (JwtAuthGuard)
 | Unread count | `GET /notifications/unread-count` | ✅ Implemented | `notifications.controller.ts:41` |
 | Mark single as read | `PATCH /notifications/:id/read` | ✅ Implemented | `notifications.controller.ts:49` |
 | Mark all as read | `PATCH /notifications/read-all` | ✅ Implemented | `notifications.controller.ts:60` |
-| Email/SMS/Push delivery | — | ❌ Not present | `NotificationChannel` enum has these; no transport wired. SMTP/SMS vars commented in `.env.example` |
+| WhatsApp delivery | `POST /webhooks/whatsapp` | ✅ **NEW** | Twilio-based; leave approval YES/NO via `WhatsAppModule` |
+| Email/SMS/Push delivery | — | ❌ Not present | SMTP/SMS/Push not wired; only WhatsApp and IN_APP channels active |
 
 #### Infrastructure / Cross-cutting
 
@@ -298,6 +340,8 @@ POST /auth/logout (JwtAuthGuard)
 | Health check | `GET /health` | ✅ Implemented | `health.controller.ts` — checks DB with `SELECT 1` |
 | Audit log query | `GET /audit/logs` | ✅ Implemented | `audit.controller.ts:38` |
 | Dashboard stats | `GET /dashboard/stats` | ✅ Implemented | `dashboard.controller.ts` — 14 parallel Prisma queries + 7 day login trend |
+| Attendance tracking | `GET/POST /attendance/*` | ✅ **NEW** | Full Phase 7 module — `attendance.controller.ts`, `device.service.ts` |
+| WhatsApp notifications | `GET/POST /webhooks/whatsapp` | ✅ **NEW** | `whatsapp.controller.ts`, `whatsapp.service.ts` |
 | Mess management | — | ❌ Not present | Mentioned in architecture doc, no module in `src/` or `app.module.ts` |
 
 ---
@@ -319,6 +363,7 @@ POST /auth/logout (JwtAuthGuard)
 | `/dashboard/students` | `app/dashboard/students/` | ⚠️ Directory present |
 | `/dashboard/allotments` | `app/dashboard/allotments/` | ⚠️ Directory present |
 | `/dashboard/leave` | `app/dashboard/leave/` | ⚠️ Directory present |
+| `/dashboard/attendance` | `app/dashboard/attendance/page.tsx` (60KB) | ✅ **NEW** — Real-time monitoring, roll-call, QR, device mgmt |
 | `/dashboard/complaints` | `app/dashboard/complaints/` | ⚠️ Directory present |
 | `/dashboard/notices` | `app/dashboard/notices/` | ⚠️ Directory present |
 | `/dashboard/gate` | `app/dashboard/gate/` | ⚠️ Directory present |
@@ -369,9 +414,22 @@ POST /auth/logout (JwtAuthGuard)
 | Violations (auto from gate) | 5 | ⚠️ Partial | Schema + controller ready; creation logic in gate service — needs verification |
 | Policy Snapshots | 5 | ✅ Implemented | Captured per gate entry |
 | In-app notifications | 5 | ✅ Implemented | Stored in DB |
-| Email/SMS/Push delivery | 5 | ❌ Missing | Channels in schema; no transport |
+| WhatsApp delivery | 5 | ✅ **NEW** | Twilio integration for leave approval |
+| Email/SMS/Push delivery | 5 | ❌ Missing | Only WhatsApp and IN_APP active; others not wired |
 | Hostel registration / admission | 6 | ✅ Implemented | Full lifecycle: draft→submit→review→allot |
 | Fee recording | 6 | ✅ Implemented | HOSTEL_FEE, MESS_FEE, CAUTION_DEPOSIT |
+| Attendance tracking (anti-proxy) | 7 | ✅ **NEW** | Full: QR rotation, GPS, device binding, gate linking, cron expiry |
+| Device management (anti-proxy) | 7 | ✅ **NEW** | Register, change request lifecycle, warden approval |
+| WhatsApp parent notification | — | ✅ **NEW** | Twilio integration with interactive quick-reply buttons |
+| Leave→Attendance auto-linking | — | ✅ **NEW** | `markLeaveAttendance()` auto-creates ON_LEAVE records |
+| Gate→Attendance auto-linking | — | ✅ **NEW** | `upsertFromGateEntry()` called by `GateService` |
+| Leave eligibility check | — | ✅ **NEW** | `GET /leave/eligibility` validates all prerequisites |
+| Parent leave rejection | — | ✅ **NEW** | `POST /leave/:id/parent-reject` + `PARENT_REJECTED` status |
+| `hasRole()` helper | — | ✅ **NEW** | `auth/helpers/role.helper.ts` — type-safe role checking |
+| `PresenceStatus` on BedAssignment | — | ✅ **NEW** | IN_HOSTEL / OUT_CAMPUS / ON_LEAVE tracking |
+| `PasswordResetToken` schema | — | ⚠️ Schema only | Model exists; no `POST /auth/forgot-password` endpoint yet |
+| Cron scheduler | — | ✅ **NEW** | `@nestjs/schedule` — `@Cron(EVERY_MINUTE)` for session expiry |
+| Unit tests for attendance | — | ✅ **NEW** | `attendance.service.spec.ts`, `device.service.spec.ts` |
 | Online payment (Razorpay) | — | ❌ Missing | Commented out in env; not implemented |
 | Mess management | — | ❌ Missing | Documented in arch; no module exists |
 | MFA / TOTP | — | ❌ Missing | Deferred to Phase 2 |
@@ -466,7 +524,7 @@ Any approved leave auto-links to GateEntry via linkedLeaveId when student exits.
 
 | # | Issue | Evidence | Severity |
 |---|---|---|---|
-| H1 | **No password reset / forgot password flow** — No endpoint exists (no `POST /auth/forgot-password` or `POST /auth/reset-password`). Users who forget their password can only be reset by an admin via `PATCH /users/:id`. This is a major gap for a live system. | Confirmed by searching entire `src/` — not found | High |
+| H1 | **No password reset / forgot password flow** — No endpoint exists. However, a `PasswordResetToken` model now exists in the schema (`schema.prisma:192`), indicating this is planned. The token model has `tokenHash`, `expiresAt`, `usedAt` fields — but no `POST /auth/forgot-password` or `POST /auth/reset-password` endpoint has been created yet. | `PasswordResetToken` schema exists; no endpoint in `auth.controller.ts` | High — **Partially addressed (schema only)** |
 | H2 | **Role assignment has no API endpoint** — The RBAC matrix specifies `ROLE_ASSIGN` / `ROLE_REVOKE` permissions but there is no `/users/:id/roles` or `/roles` endpoint. Role assignment can only be done via direct DB seed or Prisma Studio. | `docs/rbac-matrix.md:30-31`, no route found | High |
 | H3 | **Dashboard controller queries DB directly** — `DashboardController` injects `PrismaService` directly and executes 14+ parallel queries in a single request, plus a 7-iteration loop (one query per day for login trend). This is an **N+1 loop query** (`dashboard.controller.ts:97–116`). At scale, this single endpoint could be a bottleneck. | `apps/api/src/dashboard/dashboard.controller.ts:97–116` | High |
 | H4 | **Token storage in localStorage** — `assumptions.md:25` explicitly states "tokens stored in localStorage for Phase 1." This exposes access tokens to XSS attacks in the web app. | `docs/assumptions.md:52` | High |
@@ -476,8 +534,8 @@ Any approved leave auto-links to GateEntry via linkedLeaveId when student exits.
 
 | # | Issue | Evidence | Severity |
 |---|---|---|---|
-| M1 | **Notification delivery not implemented** — `Notification.channel` supports EMAIL, SMS, PUSH, IN_APP. Only IN_APP is stored. No SMTP, SMS provider, or push integration wired. SMTP/SMS vars are commented in `.env.example`. Users set to be notified about gate events, violations, etc. silently receive nothing externally. | `apps/api/src/notifications/`, `.env.example:47-52` | Medium |
-| M2 | **Leave controller filters by `user.roles` using `Array.includes` on a plain array** — `leave.controller.ts:52`: `user.roles?.includes('STUDENT')`. If the JWT payload doesn't populate `roles` as a flat string array, this silently returns all leave data to a student who should only see their own. Same pattern in complaints and violations controllers. | `leave.controller.ts:52,78`, `complaints.controller.ts:53`, `violations.controller.ts:79` | Medium |
+| M1 | **Notification delivery partially implemented** — WhatsApp delivery is now wired via Twilio for leave approvals. However, EMAIL, SMS, PUSH channels remain unimplemented. SMTP/SMS vars still commented in `.env.example`. | `whatsapp.service.ts`, `.env.example:47-52` | Medium — **Partially mitigated** |
+| M2 | **~~Leave controller filters by `user.roles` using `Array.includes`~~** — **FIXED.** Leave controller now uses `hasRole()` helper from `auth/helpers/role.helper.ts` for type-safe role checking. Same pattern adopted in complaints and violations. | `leave.controller.ts:65`, `auth/helpers/role.helper.ts` | Medium — **Mitigated** |
 | M3 | **No pagination on audit log default limit is 200** — `audit.controller.ts:28`: `@Max(200)` allows fetching up to 200 audit records per page. This is acceptable but the audit table can grow unbounded with no archival/cleanup strategy documented. | `audit.controller.ts:28` | Medium |
 | M4 | **DashboardController bypasses `DashboardModule`** — It injects `PrismaService` directly rather than delegating to individual module services. This breaks module encapsulation and makes it hard to add caching or permission granularity later. | `dashboard.controller.ts:13` | Medium |
 | M5 | **Mess Management is documented but completely absent** — Architecture doc (`architecture.md:46`) shows a "Mess Module" as a core module. No `mess/` directory exists in `src/`, it's not in `app.module.ts`, and the RBAC matrix defines `MESS_MANAGE` and `MESS_SCAN` permissions that have no enforcing code. | `apps/api/src/` — no `mess` directory | Medium |
@@ -605,7 +663,7 @@ Any approved leave auto-links to GateEntry via linkedLeaveId when student exits.
 | GET | `/api/v1/dashboard/stats` | `dashboard/dashboard.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN, WARDEN, DEPUTY_WARDEN |
 | GET | `/api/v1/audit/logs` | `audit/audit.controller.ts` | SUPER_ADMIN, HOSTEL_ADMIN |
 
-**Total: ~90 unique endpoints across 19 modules.**
+**Total: ~110+ unique endpoints across 21 modules (up from ~90 across 19).**
 
 ---
 
@@ -667,8 +725,13 @@ Any approved leave auto-links to GateEntry via linkedLeaveId when student exits.
 | `Notification` | `notifications` | 5 | → User (recipient), Violation?, GateEntry? |
 | `HostelRegistration` | `hostel_registrations` | 6 | → Student, Hostel, Reviewer; 5 declaration flags |
 | `RegistrationFee` | `registration_fees` | 6 | → HostelRegistration, RecordedBy |
+| `DailyAttendance` | `daily_attendance` | 7 | Student → date unique; source (GATE/QR_SCAN/ROLL_CALL/SYSTEM); LeaveRequest?, Session? |
+| `AttendanceSession` | `attendance_sessions` | 7 | Hostel, CreatedBy; GPS anchor, secret-based QR rotation |
+| `StudentDevice` | `student_devices` | 7 | User; fingerprint binding, active/deactivated lifecycle |
+| `DeviceChangeRequest` | `device_change_requests` | 7 | User, Reviewer; PENDING/APPROVED/REJECTED |
+| `PasswordResetToken` | `password_reset_tokens` | 1 | User; tokenHash, expiresAt, usedAt |
 
-**Enums (20+):** `UserStatus`, `HostelType`, `HostelStatus`, `RoomType`, `RoomStatus`, `BedStatus`, `BuildingStatus`, `AssignmentStatus`, `LeaveType`, `LeaveStatus`, `ComplaintCategory`, `ComplaintPriority`, `ComplaintStatus`, `NoticePriority`, `NoticeScope`, `GateEntryType`, `GatePassStatus`, `ViolationType`, `EscalationState`, `NotificationState`, `NotificationChannel`, `AdmissionMode`, `RegistrationStatus`, `FeeType`
+**Enums (25+, up from 20+):** `UserStatus`, `HostelType`, `HostelStatus`, `RoomType`, `RoomStatus`, `BedStatus`, `BuildingStatus`, `AssignmentStatus`, `PresenceStatus` *(NEW)*, `LeaveType`, `LeaveStatus` *(added PARENT_REJECTED)*, `ComplaintCategory`, `ComplaintPriority`, `ComplaintStatus`, `NoticePriority`, `NoticeScope`, `GateEntryType`, `GatePassStatus`, `ViolationType`, `EscalationState`, `NotificationState`, `NotificationChannel` *(added WHATSAPP)*, `AdmissionMode`, `RegistrationStatus`, `FeeType`, `AttendanceStatus` *(NEW)*, `AttendanceSource` *(NEW)*, `SessionStatus` *(NEW)*, `DeviceRequestStatus` *(NEW)*
 
 ---
 
