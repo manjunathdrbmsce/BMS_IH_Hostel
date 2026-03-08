@@ -10,6 +10,14 @@
       "android"
     ],
     "newArchEnabled": true,
+    "autolinking": {
+      "exclude": [
+        "expo-dev-client",
+        "expo-dev-launcher",
+        "expo-dev-menu",
+        "expo-dev-menu-interface"
+      ]
+    },
     "plugins": [
       "expo-router",
       "expo-secure-store",

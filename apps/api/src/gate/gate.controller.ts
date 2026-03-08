@@ -72,30 +72,42 @@ export class GateController {
   // ---- Gate Passes ----
 
   @Post('passes')
-  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN')
+  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT')
   @AuditAction('GATE_PASS_CREATE', 'gate')
   @ApiOperation({ summary: 'Create a gate pass' })
   @ApiResponse({ status: 201, description: 'Gate pass created' })
   async createPass(@Body() dto: CreateGatePassDto, @CurrentUser() user: any) {
+    // Students can only request passes for themselves
+    if (user.roles?.some((r: any) => r.name === 'STUDENT')) {
+      dto.studentId = user.id;
+    }
     const pass = await this.gateService.createPass(dto, user.id);
     return { success: true, data: pass };
   }
 
   @Get('passes')
-  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'SECURITY_GUARD')
+  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'SECURITY_GUARD', 'STUDENT')
   @ApiOperation({ summary: 'List gate passes with filters' })
   @ApiResponse({ status: 200, description: 'Gate passes list' })
-  async findPasses(@Query() query: ListGatePassesQueryDto) {
+  async findPasses(@Query() query: ListGatePassesQueryDto, @CurrentUser() user: any) {
+    // Students can only see their own passes
+    if (user.roles?.some((r: any) => r.name === 'STUDENT')) {
+      query.studentId = user.id;
+    }
     const result = await this.gateService.findPasses(query);
     return { success: true, ...result };
   }
 
   @Get('passes/:id')
-  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'SECURITY_GUARD')
+  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'SECURITY_GUARD', 'STUDENT')
   @ApiOperation({ summary: 'Get gate pass by ID' })
   @ApiResponse({ status: 200, description: 'Gate pass details' })
-  async findPass(@Param('id', ParseUUIDPipe) id: string) {
+  async findPass(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     const pass = await this.gateService.findPassById(id);
+    // Students can only view their own passes
+    if (user.roles?.some((r: any) => r.name === 'STUDENT') && pass.studentId !== user.id) {
+      return { success: false, message: 'Forbidden' };
+    }
     return { success: true, data: pass };
   }
 

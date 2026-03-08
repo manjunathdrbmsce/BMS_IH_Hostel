@@ -13,6 +13,7 @@ const MENU_SECTIONS = [
     title: 'Services',
     items: [
       { icon: 'chatbubble-ellipses-outline', label: 'Complaints', route: '/(student)/complaints', color: '#F59E0B' },
+      { icon: 'restaurant-outline', label: 'Mess', route: '/(student)/mess', color: '#10B981' },
       { icon: 'megaphone-outline', label: 'Notices', route: '/(student)/notices', color: '#3B82F6' },
       { icon: 'exit-outline', label: 'Gate Pass', route: '/(student)/gate', color: '#8B5CF6' },
       { icon: 'shield-checkmark-outline', label: 'Violations', route: '/(student)/violations', color: '#EF4444' },

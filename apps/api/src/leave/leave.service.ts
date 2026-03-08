@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AttendanceService } from '../attendance/attendance.service';
+import { MessRebateService } from '../mess/mess-rebate.service';
 import { CreateLeaveRequestDto, ListLeaveQueryDto } from './dto';
 
 @Injectable()
@@ -21,6 +22,7 @@ export class LeaveService {
     private readonly whatsAppService: WhatsAppService,
     private readonly notificationsService: NotificationsService,
     private readonly attendanceService: AttendanceService,
+    private readonly messRebateService: MessRebateService,
   ) { }
 
   /**
@@ -443,6 +445,13 @@ export class LeaveService {
       this.logger.log(`Auto-created GatePass for leave ${id}`);
     } catch (err: any) {
       this.logger.warn(`Failed to auto-create GatePass: ${err?.message}`);
+    }
+
+    // Phase 8: Auto-create mess rebate for long leaves (≥3 days)
+    try {
+      await this.messRebateService.createAutoRebate(id);
+    } catch (err: any) {
+      this.logger.warn(`Failed to auto-create mess rebate: ${err?.message}`);
     }
 
     return this.findById(id);

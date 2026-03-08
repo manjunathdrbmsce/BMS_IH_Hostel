@@ -172,6 +172,55 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
 
+  // ── Mess Management ────────────────────────────────────────────────────
+  {
+    label: 'Mess Management',
+    items: [
+      {
+        label: 'Mess Overview',
+        href: '/dashboard/mess',
+        icon: 'UtensilsCrossed',
+        roles: ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'MESS_MANAGER', 'WARDEN'],
+      },
+      {
+        label: 'Menus',
+        href: '/dashboard/mess/menus',
+        icon: 'UtensilsCrossed',
+        roles: ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'MESS_MANAGER'],
+      },
+      {
+        label: 'Scan Station',
+        href: '/dashboard/mess/scan',
+        icon: 'ScanLine',
+        roles: ['SUPER_ADMIN', 'MESS_MANAGER', 'MESS_STAFF'],
+      },
+      {
+        label: 'Scan Log',
+        href: '/dashboard/mess/scans',
+        icon: 'ClipboardCheck',
+        roles: ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'MESS_MANAGER', 'WARDEN'],
+      },
+      {
+        label: 'Rebates',
+        href: '/dashboard/mess/rebates',
+        icon: 'CalendarOff',
+        roles: ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN'],
+      },
+      {
+        label: 'Feedback',
+        href: '/dashboard/mess/feedback',
+        icon: 'MessageSquareWarning',
+        roles: ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'MESS_MANAGER'],
+      },
+      {
+        label: 'Reports',
+        href: '/dashboard/mess/reports',
+        icon: 'ScrollText',
+        roles: ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'MESS_MANAGER'],
+      },
+    ],
+  },
+
   // ── System ────────────────────────────────────────────────────────────
   {
     label: 'System',
@@ -422,4 +471,36 @@ export const DEVICE_REQUEST_STATUSES = [
   { value: 'PENDING', label: 'Pending' },
   { value: 'APPROVED', label: 'Approved' },
   { value: 'REJECTED', label: 'Rejected' },
+] as const;
+
+// ── Mess Management ─────────────────────────────────────────────────────────
+
+export const MEAL_TYPES = [
+  { value: 'BREAKFAST', label: 'Breakfast' },
+  { value: 'LUNCH', label: 'Lunch' },
+  { value: 'SNACKS', label: 'Snacks' },
+  { value: 'DINNER', label: 'Dinner' },
+] as const;
+
+export const DAYS_OF_WEEK = [
+  { value: 'MONDAY', label: 'Monday', short: 'Mon' },
+  { value: 'TUESDAY', label: 'Tuesday', short: 'Tue' },
+  { value: 'WEDNESDAY', label: 'Wednesday', short: 'Wed' },
+  { value: 'THURSDAY', label: 'Thursday', short: 'Thu' },
+  { value: 'FRIDAY', label: 'Friday', short: 'Fri' },
+  { value: 'SATURDAY', label: 'Saturday', short: 'Sat' },
+  { value: 'SUNDAY', label: 'Sunday', short: 'Sun' },
+] as const;
+
+export const MENU_STATUSES = [
+  { value: 'DRAFT', label: 'Draft' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'ARCHIVED', label: 'Archived' },
+] as const;
+
+export const REBATE_STATUSES = [
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'REJECTED', label: 'Rejected' },
+  { value: 'CREDITED', label: 'Credited' },
 ] as const;

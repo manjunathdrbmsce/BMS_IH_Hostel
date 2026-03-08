@@ -11,7 +11,7 @@ export interface User {
   lastName: string;
   usn: string | null;
   status: string;
-  roles: { role: RoleName }[];
+  roles: { name: RoleName; displayName?: string }[];
   studentProfile?: StudentProfile | null;
   createdAt: string;
 }

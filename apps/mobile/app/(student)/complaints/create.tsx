@@ -67,7 +67,7 @@ export default function CreateComplaint() {
     try {
       setSubmitting(true);
       setError('');
-      await complaintsApi.create({ category, subject: title.trim(), description: description.trim() });
+      await complaintsApi.create({ category, subject: title.trim(), description: description.trim(), isAnonymous });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
     } catch (e: any) {

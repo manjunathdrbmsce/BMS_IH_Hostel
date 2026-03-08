@@ -116,19 +116,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   hasRole: (role: RoleName) => {
     const { user } = get();
     if (!user) return false;
-    return user.roles.some((r) => r.role === role);
+    return user.roles.some((r) => r.name === role);
   },
 
   getRoles: () => {
     const { user } = get();
     if (!user) return [];
-    return user.roles.map((r) => r.role);
+    return user.roles.map((r) => r.name);
   },
 
   getNavigatorGroup: () => {
     const { user } = get();
     if (!user) return '(auth)';
-    return getNavigatorGroup(user.roles.map((r) => r.role));
+    return getNavigatorGroup(user.roles.map((r) => r.name));
   },
 
   clearError: () => set({ error: null }),

@@ -80,6 +80,14 @@ model User {
   deviceChangeRequests   DeviceChangeRequest[] @relation("DeviceRequester")
   deviceChangesReviewed  DeviceChangeRequest[] @relation("DeviceReviewer")
 
+  // Phase 8: Mess Management relations
+  mealScans              MealScan[]           @relation("MealScanStudent")
+  mealScansAsStaff       MealScan[]           @relation("MealScanStaff")
+  mealFeedback           MealFeedback[]       @relation("MealFeedbackStudent")
+  messRebates            MessRebate[]         @relation("RebateStudent")
+  messRebatesReviewed    MessRebate[]         @relation("RebateReviewer")
+  messMenusCreated       MessMenu[]           @relation("MessMenuCreator")
+
   // Auth - Password Reset
   passwordResetTokens   PasswordResetToken[]
 
@@ -267,6 +275,12 @@ model Hostel {
 
   // Phase 7: Attendance relations
   attendanceSessions  AttendanceSession[]
+
+  // Phase 8: Mess Management relations
+  messMenus      MessMenu[]      @relation("MessMenuHostel")
+  mealScans      MealScan[]      @relation("MealScanHostel")
+  mealFeedback   MealFeedback[]  @relation("MealFeedbackHostel")
+  messRebates    MessRebate[]    @relation("RebateHostel")
 
   @@index([type])
   @@index([status])
@@ -608,6 +622,9 @@ model LeaveRequest {
   notifications        Notification[]    @relation("LeaveNotifications")
   attendanceRecords    DailyAttendance[] @relation("AttendanceLeave")
 
+  // Phase 8: Mess rebates linked to leave
+  messRebates          MessRebate[]      @relation("RebateLeave")
+
   @@index([studentId])
   @@index([hostelId])
   @@index([status])
@@ -644,6 +661,7 @@ model Complaint {
   description  String           @db.Text
   priority     ComplaintPriority @default(MEDIUM)
   status       ComplaintStatus   @default(OPEN)
+  isAnonymous  Boolean           @default(false) @map("is_anonymous")
 
   assignedToId String?   @map("assigned_to_id") @db.Uuid
   resolvedAt   DateTime? @map("resolved_at")
@@ -1243,4 +1261,199 @@ model DeviceChangeRequest {
 
   @@index([userId, status])
   @@map("device_change_requests")
+}
+
+// ===========================================================================
+// Phase 8: Mess Management
+// ===========================================================================
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  SNACKS
+  DINNER
+}
+
+enum MessType {
+  VEG
+  NON_VEG
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum MealScanStatus {
+  SCANNED
+  CANCELLED
+}
+
+enum RebateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CREDITED
+}
+
+enum MenuStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+// ---------------------------------------------------------------------------
+// Mess Menu — Weekly rotating menu template
+// ---------------------------------------------------------------------------
+
+model MessMenu {
+  id            String     @id @default(uuid()) @db.Uuid
+  hostelId      String     @map("hostel_id") @db.Uuid
+  name          String     @db.VarChar(200)
+  messType      MessType   @map("mess_type")
+  status        MenuStatus @default(DRAFT)
+  effectiveFrom DateTime   @map("effective_from") @db.Date
+  effectiveTo   DateTime?  @map("effective_to") @db.Date
+  createdById   String     @map("created_by_id") @db.Uuid
+  notes         String?    @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  hostel    Hostel         @relation("MessMenuHostel", fields: [hostelId], references: [id])
+  createdBy User           @relation("MessMenuCreator", fields: [createdById], references: [id])
+  items     MessMenuItem[]
+
+  @@unique([hostelId, messType, status], map: "uq_active_menu")
+  @@index([hostelId])
+  @@index([status])
+  @@index([effectiveFrom])
+  @@map("mess_menus")
+}
+
+// ---------------------------------------------------------------------------
+// Mess Menu Item — Individual dish per day+meal slot
+// ---------------------------------------------------------------------------
+
+model MessMenuItem {
+  id          String    @id @default(uuid()) @db.Uuid
+  menuId      String    @map("menu_id") @db.Uuid
+  day         DayOfWeek
+  mealType    MealType  @map("meal_type")
+  items       String    @db.Text
+  specialNote String?   @map("special_note") @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  menu MessMenu @relation(fields: [menuId], references: [id], onDelete: Cascade)
+
+  @@unique([menuId, day, mealType], map: "uq_menu_day_meal")
+  @@index([menuId])
+  @@map("mess_menu_items")
+}
+
+// ---------------------------------------------------------------------------
+// Meal Scan — Per-student per-meal attendance log
+// ---------------------------------------------------------------------------
+
+model MealScan {
+  id                String         @id @default(uuid()) @db.Uuid
+  studentId         String         @map("student_id") @db.Uuid
+  hostelId          String         @map("hostel_id") @db.Uuid
+  date              DateTime       @db.Date
+  mealType          MealType       @map("meal_type")
+  scannedAt         DateTime       @default(now()) @map("scanned_at")
+  scannedById       String         @map("scanned_by_id") @db.Uuid
+  status            MealScanStatus @default(SCANNED)
+  isGuest           Boolean        @default(false) @map("is_guest")
+  guestName         String?        @map("guest_name") @db.VarChar(200)
+  guestCount        Int            @default(1) @map("guest_count")
+  notes             String?        @db.VarChar(500)
+  deviceFingerprint String?        @map("device_fingerprint") @db.VarChar(255)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  student   User   @relation("MealScanStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  hostel    Hostel @relation("MealScanHostel", fields: [hostelId], references: [id])
+  scannedBy User   @relation("MealScanStaff", fields: [scannedById], references: [id])
+
+  @@unique([studentId, date, mealType], map: "uq_student_meal_per_day")
+  @@index([studentId])
+  @@index([hostelId])
+  @@index([date])
+  @@index([mealType])
+  @@index([scannedAt])
+  @@map("meal_scans")
+}
+
+// ---------------------------------------------------------------------------
+// Meal Feedback — Student rates a meal (1–5 stars)
+// ---------------------------------------------------------------------------
+
+model MealFeedback {
+  id          String   @id @default(uuid()) @db.Uuid
+  studentId   String   @map("student_id") @db.Uuid
+  hostelId    String   @map("hostel_id") @db.Uuid
+  date        DateTime @db.Date
+  mealType    MealType @map("meal_type")
+  rating      Int
+  comment     String?  @db.Text
+  isAnonymous Boolean  @default(false) @map("is_anonymous")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  student User   @relation("MealFeedbackStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  hostel  Hostel @relation("MealFeedbackHostel", fields: [hostelId], references: [id])
+
+  @@unique([studentId, date, mealType], map: "uq_feedback_per_meal")
+  @@index([hostelId])
+  @@index([date])
+  @@index([rating])
+  @@map("meal_feedback")
+}
+
+// ---------------------------------------------------------------------------
+// Mess Rebate — Fee refund for absent meals
+// ---------------------------------------------------------------------------
+
+model MessRebate {
+  id           String       @id @default(uuid()) @db.Uuid
+  studentId    String       @map("student_id") @db.Uuid
+  hostelId     String       @map("hostel_id") @db.Uuid
+  fromDate     DateTime     @map("from_date") @db.Date
+  toDate       DateTime     @map("to_date") @db.Date
+  totalMeals   Int          @map("total_meals")
+  amount       Float?
+  status       RebateStatus @default(PENDING)
+  reason       String       @db.Text
+  leaveId      String?      @map("leave_id") @db.Uuid
+  reviewedById String?      @map("reviewed_by_id") @db.Uuid
+  reviewedAt   DateTime?    @map("reviewed_at")
+  reviewNotes  String?      @map("review_notes") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  student    User          @relation("RebateStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  hostel     Hostel        @relation("RebateHostel", fields: [hostelId], references: [id])
+  leave      LeaveRequest? @relation("RebateLeave", fields: [leaveId], references: [id])
+  reviewedBy User?         @relation("RebateReviewer", fields: [reviewedById], references: [id])
+
+  @@index([studentId])
+  @@index([hostelId])
+  @@index([status])
+  @@index([fromDate, toDate])
+  @@map("mess_rebates")
 }

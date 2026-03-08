@@ -40,6 +40,7 @@ export class ComplaintsService {
         description: dto.description.trim(),
         priority: (dto.priority as ComplaintPriority) || ComplaintPriority.MEDIUM,
         status: ComplaintStatus.OPEN,
+        isAnonymous: dto.isAnonymous ?? false,
       },
     });
 

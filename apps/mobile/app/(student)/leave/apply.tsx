@@ -12,6 +12,7 @@ import {
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
@@ -36,8 +37,10 @@ export default function ApplyLeave() {
   const [eligibility, setEligibility] = useState<LeaveEligibility | null>(null);
   const [checkingEligibility, setCheckingEligibility] = useState(true);
   const [leaveType, setLeaveType] = useState<LeaveTypeName>('HOME');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  const [fromDate, setFromDate] = useState<Date>(new Date());
+  const [toDate, setToDate] = useState<Date>(new Date());
+  const [showFromPicker, setShowFromPicker] = useState(false);
+  const [showToPicker, setShowToPicker] = useState(false);
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,9 +58,24 @@ export default function ApplyLeave() {
     })();
   }, []);
 
+  const formatDate = (date: Date) => date.toISOString().split('T')[0];
+
+  const onFromDateChange = (_event: DateTimePickerEvent, date?: Date) => {
+    setShowFromPicker(Platform.OS === 'ios');
+    if (date) {
+      setFromDate(date);
+      if (date > toDate) setToDate(date);
+    }
+  };
+
+  const onToDateChange = (_event: DateTimePickerEvent, date?: Date) => {
+    setShowToPicker(Platform.OS === 'ios');
+    if (date) setToDate(date);
+  };
+
   const handleSubmit = async () => {
-    if (!fromDate.trim() || !toDate.trim()) {
-      setError('Please enter both from and to dates (YYYY-MM-DD)');
+    if (fromDate > toDate) {
+      setError('"From" date cannot be after "To" date');
       return;
     }
     if (!reason.trim()) {
@@ -77,8 +95,8 @@ export default function ApplyLeave() {
         studentId: user?.id ?? '',
         hostelId: eligibility.hostel.id,
         type: leaveType,
-        fromDate: fromDate.trim(),
-        toDate: toDate.trim(),
+        fromDate: formatDate(fromDate),
+        toDate: formatDate(toDate),
         reason: reason.trim(),
       });
 
@@ -170,22 +188,41 @@ export default function ApplyLeave() {
 
           {/* Date Fields */}
           <Animated.View entering={FadeInDown.delay(200).duration(400)}>
-            <Input
-              label="From Date"
-              placeholder="YYYY-MM-DD"
-              leftIcon="calendar-outline"
-              value={fromDate}
-              onChangeText={setFromDate}
-              keyboardType="numbers-and-punctuation"
-            />
-            <Input
-              label="To Date"
-              placeholder="YYYY-MM-DD"
-              leftIcon="calendar-outline"
-              value={toDate}
-              onChangeText={setToDate}
-              keyboardType="numbers-and-punctuation"
-            />
+            <Text style={[styles.label, { color: colors.text }]}>From Date</Text>
+            <Pressable
+              style={[styles.dateButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => setShowFromPicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={20} color={colors.textSecondary} />
+              <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(fromDate)}</Text>
+            </Pressable>
+            {showFromPicker && (
+              <DateTimePicker
+                value={fromDate}
+                mode="date"
+                minimumDate={new Date()}
+                onChange={onFromDateChange}
+              />
+            )}
+
+            <View style={{ height: 12 }} />
+
+            <Text style={[styles.label, { color: colors.text }]}>To Date</Text>
+            <Pressable
+              style={[styles.dateButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={() => setShowToPicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={20} color={colors.textSecondary} />
+              <Text style={[styles.dateText, { color: colors.text }]}>{formatDate(toDate)}</Text>
+            </Pressable>
+            {showToPicker && (
+              <DateTimePicker
+                value={toDate}
+                mode="date"
+                minimumDate={fromDate}
+                onChange={onToDateChange}
+              />
+            )}
           </Animated.View>
 
           {/* Reason */}
@@ -250,6 +287,16 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   typeLabel: { fontSize: 14, fontWeight: '600' },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  dateText: { fontSize: 15, fontWeight: '500' },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',

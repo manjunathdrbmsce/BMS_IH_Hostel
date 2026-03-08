@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsString,
   IsOptional,
   IsEnum,
@@ -41,6 +42,11 @@ export class CreateComplaintDto {
   @IsOptional()
   @IsEnum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'])
   priority?: string;
+
+  @ApiPropertyOptional({ description: 'Submit complaint anonymously', default: false })
+  @IsOptional()
+  @IsBoolean()
+  isAnonymous?: boolean;
 }
 
 export class UpdateComplaintDto {

@@ -27,6 +27,7 @@ import {
   LogOut,
   ChevronLeft,
   Shield,
+  UtensilsCrossed,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -48,6 +49,7 @@ const iconMap: Record<string, React.ElementType> = {
   Bell,
   ScrollText,
   Settings,
+  UtensilsCrossed,
 };
 
 export function Sidebar() {

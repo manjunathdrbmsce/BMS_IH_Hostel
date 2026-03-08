@@ -14,6 +14,7 @@ const sections = [
     items: [
       { icon: 'people-outline' as const, label: 'Students', route: '/(warden)/students', color: '#6366F1' },
       { icon: 'hardware-chip-outline' as const, label: 'Devices', route: '/(warden)/devices', color: '#0EA5E9' },
+      { icon: 'restaurant-outline' as const, label: 'Mess', route: '/(warden)/mess', color: '#10B981' },
       { icon: 'exit-outline' as const, label: 'Gate Passes', route: '/(warden)/gate', color: '#F59E0B' },
     ],
   },

@@ -47,7 +47,7 @@ export default function ProfileScreen() {
   if (!user) return null;
 
   const studentProfile = user.studentProfile;
-  const roles = user.roles?.map((r: any) => r.role || r) || [];
+  const roles = user.roles?.map((r: any) => r.name || r) || [];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

@@ -18,3 +18,16 @@ export { noticesApi, type Notice } from './notices.api';
 export { violationsApi, type Violation } from './violations.api';
 export { notificationsApi, type Notification } from './notifications.api';
 export { studentsApi, dashboardApi, type DashboardStats, type GuardianLink } from './students.api';
+export {
+  messApi,
+  type MealType,
+  type DayOfWeek,
+  type MessMenu,
+  type MessMenuItem,
+  type MealScan,
+  type MealFeedback,
+  type MessRebate,
+  type LiveCounts,
+  type StudentMealStats,
+  type TodayMenu,
+} from './mess.api';

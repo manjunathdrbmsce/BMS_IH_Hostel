@@ -60,6 +60,12 @@ export default function ParentHome() {
       onPress: () => router.push('/(parent)/notices'),
     },
     {
+      icon: 'restaurant-outline',
+      label: 'Mess Menu',
+      color: '#F59E0B',
+      onPress: () => router.push('/(parent)/mess'),
+    },
+    {
       icon: 'notifications-outline',
       label: 'Notifications',
       color: '#8B5CF6',

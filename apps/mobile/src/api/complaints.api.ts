@@ -12,6 +12,7 @@ export interface Complaint {
   description: string;
   priority: string;
   status: ComplaintStatusName;
+  isAnonymous: boolean;
   assignedToId: string | null;
   resolution: string | null;
   student?: { user: { firstName: string; lastName: string; usn: string | null } };
@@ -56,6 +57,7 @@ export const complaintsApi = {
     subject: string;
     description: string;
     priority?: string;
+    isAnonymous?: boolean;
   }) => apiClient.post<ApiResponse<Complaint>>('/complaints', data),
 
   update: (id: string, data: { status?: ComplaintStatusName; assignedToId?: string; priority?: string; resolution?: string }) =>

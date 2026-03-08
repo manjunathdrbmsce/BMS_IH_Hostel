@@ -1,13 +1,22 @@
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 /**
  * Base URL for the BMS Hostel API.
- * Android emulator uses 10.0.2.2 to reach host machine's localhost.
+ *
+ * Reads from `expo.extra.apiBaseUrl` / `expo.extra.androidApiBaseUrl`
+ * set in app.config.ts, which in turn reads from the API_BASE_URL env var.
+ *
+ * Defaults: Android emulator → 10.0.2.2:3001, others → localhost:3001.
  */
+const extra = Constants.expoConfig?.extra as
+  | { apiBaseUrl?: string; androidApiBaseUrl?: string }
+  | undefined;
+
 export const API_BASE_URL: string = Platform.select({
-  android: 'http://10.0.2.2:3001',
-  ios: 'http://localhost:3001',
-  default: 'http://localhost:3001',
+  android: (extra?.androidApiBaseUrl ?? 'http://10.0.2.2:3001') + '/api/v1',
+  ios: (extra?.apiBaseUrl ?? 'http://localhost:3001') + '/api/v1',
+  default: (extra?.apiBaseUrl ?? 'http://localhost:3001') + '/api/v1',
 }) as string;
 
 /** Default timeout for API requests in milliseconds */

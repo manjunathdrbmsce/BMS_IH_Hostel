@@ -25,8 +25,51 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('access-token')
 export class UploadsController {
+  private static readonly ALLOWED_IMAGE_MIMES = [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+  ];
+
+  private static readonly ALLOWED_IMAGE_EXTS = /\.(jpg|jpeg|png|webp)$/i;
+
+  private static readonly ALLOWED_DOC_MIMES = [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'application/pdf',
+  ];
+
+  private static readonly ALLOWED_DOC_EXTS = /\.(jpg|jpeg|png|webp|pdf)$/i;
+
   @Post('photo')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: join(process.cwd(), 'uploads', 'photos'),
+        filename: (_req, file, cb) => {
+          const uniqueName = `${uuidv4()}${extname(file.originalname).toLowerCase()}`;
+          cb(null, uniqueName);
+        },
+      }),
+      limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
+      fileFilter: (_req, file, cb) => {
+        const ext = extname(file.originalname).toLowerCase();
+        if (
+          !UploadsController.ALLOWED_IMAGE_EXTS.test(ext) ||
+          !UploadsController.ALLOWED_IMAGE_MIMES.includes(file.mimetype)
+        ) {
+          return cb(
+            new BadRequestException(
+              'Only image files are allowed (JPG, PNG, WebP)',
+            ) as any,
+            false,
+          );
+        }
+        cb(null, true);
+      },
+    }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload a student photo (max 2 MB, JPG/PNG/WebP)' })
   @ApiBody({
@@ -70,10 +113,15 @@ export class UploadsController {
       }),
       limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
       fileFilter: (_req, file, cb) => {
-        const allowed = /\.(jpg|jpeg|png|webp|pdf)$/i;
-        if (!allowed.test(extname(file.originalname))) {
+        const ext = extname(file.originalname).toLowerCase();
+        if (
+          !UploadsController.ALLOWED_DOC_EXTS.test(ext) ||
+          !UploadsController.ALLOWED_DOC_MIMES.includes(file.mimetype)
+        ) {
           return cb(
-            new Error('Only JPG, PNG, WebP and PDF files are allowed') as any,
+            new BadRequestException(
+              'Only JPG, PNG, WebP and PDF files are allowed',
+            ) as any,
             false,
           );
         }
