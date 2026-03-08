@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 /**
- * Base URL for the BMS Hostel API.
+ * Base URL for the BMS International Hostel API.
  *
  * Reads from `expo.extra.apiBaseUrl` / `expo.extra.androidApiBaseUrl`
  * set in app.config.ts, which in turn reads from the API_BASE_URL env var.

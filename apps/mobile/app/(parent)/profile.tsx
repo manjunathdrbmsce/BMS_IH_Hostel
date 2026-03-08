@@ -102,7 +102,7 @@ export default function ParentProfile() {
           icon={<Ionicons name="log-out-outline" size={18} color="#FFF" />}
         />
 
-        <Text style={[styles.versionText, { color: colors.textTertiary }]}>BMS Hostel v0.2.0</Text>
+        <Text style={[styles.versionText, { color: colors.textTertiary }]}>BMS International Hostel v0.2.0</Text>
       </ScrollView>
     </View>
   );

@@ -1,5 +1,5 @@
 /**
- * BMS Hostel — Typography Scale
+ * BMS International Hostel — Typography Scale
  * System fonts with Inter as preferred (loaded via expo-font).
  */
 

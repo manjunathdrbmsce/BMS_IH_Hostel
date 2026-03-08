@@ -133,11 +133,9 @@ export default function SignupPage() {
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-              <Building2 className="w-6 h-6 text-white" />
-            </div>
+            <img src="/logo.svg" alt="BMS Logo" className="w-12 h-12 rounded-lg object-contain bg-white/10 p-1" />
             <div>
-              <h1 className="text-xl font-bold text-white">BMS Hostel</h1>
+              <h1 className="text-xl font-bold text-white">BMS International Hostel</h1>
               <p className="text-xs text-emerald-200">Management System</p>
             </div>
           </div>
@@ -169,11 +167,9 @@ export default function SignupPage() {
         <div className="w-full max-w-lg">
           {/* Mobile Logo */}
           <div className="flex items-center gap-3 mb-6 lg:hidden">
-            <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center">
-              <Building2 className="w-6 h-6 text-white" />
-            </div>
+            <img src="/logo.svg" alt="BMS Logo" className="w-12 h-12 rounded-lg object-contain" />
             <div>
-              <h1 className="text-xl font-bold text-gray-900">BMS Hostel</h1>
+              <h1 className="text-xl font-bold text-gray-900">BMS International Hostel</h1>
               <p className="text-xs text-gray-500">Student Registration</p>
             </div>
           </div>
@@ -330,7 +326,7 @@ export default function SignupPage() {
                 <span className="text-xs text-gray-600">
                   I agree to the{' '}
                   <span className="text-emerald-600 font-medium">Terms & Conditions</span> and{' '}
-                  <span className="text-emerald-600 font-medium">Privacy Policy</span> of BMS Hostel Management System
+                  <span className="text-emerald-600 font-medium">Privacy Policy</span> of BMS International Hostel Management System
                 </span>
               </label>
 

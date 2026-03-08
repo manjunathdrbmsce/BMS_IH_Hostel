@@ -1,6 +1,6 @@
 "use strict";
 // =============================================================================
-// BMS Hostel Platform - Database Seed Script
+// BMS International Hostel Platform - Database Seed Script
 // Seeds roles, permissions, role-permission mappings, and super admin user
 // =============================================================================
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {

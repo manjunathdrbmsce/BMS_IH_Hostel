@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'BMS Hostel - Admin Portal',
+  title: 'BMS International Hostel - Admin Portal',
   description: 'Enterprise Hostel Management Platform - Administration Console',
 };
 

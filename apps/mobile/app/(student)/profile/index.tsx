@@ -171,7 +171,7 @@ export default function ProfileScreen() {
 
         {/* App Version */}
         <Text style={[styles.versionText, { color: colors.textTertiary }]}>
-          BMS Hostel v0.2.0
+          BMS International Hostel v0.2.0
         </Text>
       </ScrollView>
     </View>

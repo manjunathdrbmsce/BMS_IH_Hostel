@@ -49,7 +49,7 @@ async function bootstrap() {
 
   // Swagger / OpenAPI
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('BMS Hostel Platform API')
+    .setTitle('BMS International Hostel Platform API')
     .setDescription('Enterprise Hostel Management Platform - REST API')
     .setVersion('0.2.0')
     .addBearerAuth(

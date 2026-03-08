@@ -83,11 +83,9 @@ export default function LoginPage() {
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
-              <Building2 className="w-6 h-6 text-white" />
-            </div>
+            <img src="/logo.svg" alt="BMS Logo" className="w-12 h-12 rounded-lg object-contain bg-white/10 p-1" />
             <div>
-              <h1 className="text-xl font-bold text-white">BMS Hostel</h1>
+              <h1 className="text-xl font-bold text-white">BMS International Hostel</h1>
               <p className="text-xs text-indigo-200">Management System</p>
             </div>
           </div>
@@ -112,7 +110,7 @@ export default function LoginPage() {
 
           {/* Footer */}
           <p className="text-indigo-300 text-sm">
-            &copy; {new Date().getFullYear()} BMS Hostel Management. Enterprise Edition v2.0
+            &copy; {new Date().getFullYear()} BMS International Hostel Management. Enterprise Edition v2.0
           </p>
         </div>
       </div>
@@ -122,11 +120,9 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="flex items-center gap-3 mb-8 lg:hidden">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center">
-              <Building2 className="w-6 h-6 text-white" />
-            </div>
+            <img src="/logo.svg" alt="BMS Logo" className="w-12 h-12 rounded-lg object-contain" />
             <div>
-              <h1 className="text-xl font-bold text-gray-900">BMS Hostel</h1>
+              <h1 className="text-xl font-bold text-gray-900">BMS International Hostel</h1>
               <p className="text-xs text-gray-500">Management System</p>
             </div>
           </div>

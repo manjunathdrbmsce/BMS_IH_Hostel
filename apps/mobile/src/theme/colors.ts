@@ -1,5 +1,5 @@
 /**
- * BMS Hostel — Color Palette
+ * BMS International Hostel — Color Palette
  * Premium indigo-based palette with full light + dark mode support.
  */
 

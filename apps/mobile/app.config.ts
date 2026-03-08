@@ -15,7 +15,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
 
   return {
     ...config,
-    name: 'BMS Hostel',
+    name: 'BMS International Hostel',
     slug: 'bms-hostel',
     version: '1.0.0',
     orientation: 'portrait',
@@ -42,23 +42,23 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         'expo-camera',
         {
           cameraPermission:
-            'BMS Hostel needs camera access to scan QR codes for attendance.',
+            'BMS International Hostel needs camera access to scan QR codes for attendance.',
         },
       ],
       [
         'expo-location',
         {
           locationAlwaysAndWhenInUsePermission:
-            'BMS Hostel uses your location to verify attendance proximity.',
+            'BMS International Hostel uses your location to verify attendance proximity.',
           locationWhenInUsePermission:
-            'BMS Hostel uses your location to verify attendance proximity.',
+            'BMS International Hostel uses your location to verify attendance proximity.',
         },
       ],
       [
         'expo-image-picker',
         {
           photosPermission:
-            'BMS Hostel needs photo access to attach images to complaints.',
+            'BMS International Hostel needs photo access to attach images to complaints.',
         },
       ],
     ],

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BMS Hostel — Rollback Script
+# BMS International Hostel — Rollback Script
 # Restores the previous deployment state
 # Usage: ./scripts/rollback.sh [rollback-dir]
 # =============================================================================
@@ -23,7 +23,7 @@ ok()   { echo -e "${GREEN}[$(date '+%H:%M:%S')] ✓${NC} $*"; }
 err()  { echo -e "${RED}[$(date '+%H:%M:%S')] ✗${NC} $*"; }
 
 log "═══════════════════════════════════════════════════════════════"
-log "  BMS Hostel — ROLLBACK"
+log "  BMS International Hostel — ROLLBACK"
 log "═══════════════════════════════════════════════════════════════"
 
 if [ ! -d "$ROLLBACK_DIR" ] || [ ! -f "$ROLLBACK_DIR/commit" ]; then

@@ -128,6 +128,6 @@
   "tags": ["bms", "hostel", "production"],
   "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
-  "title": "BMS Hostel — Production Overview",
+  "title": "BMS International Hostel — Production Overview",
   "uid": "bms-hostel-overview"
 }

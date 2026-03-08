@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BMS Hostel — One-Step Deploy Script
+# BMS International Hostel — One-Step Deploy Script
 # Usage: ./scripts/deploy.sh [commit-sha]
 # =============================================================================
 set -euo pipefail
@@ -30,7 +30,7 @@ mkdir -p "$PROJECT_DIR/logs"
 
 echo "" >> "$DEPLOY_LOG"
 log "═══════════════════════════════════════════════════════════════"
-log "  BMS Hostel — Deploy Starting"
+log "  BMS International Hostel — Deploy Starting"
 log "  Commit: $COMMIT_SHA | Timestamp: $TIMESTAMP"
 log "═══════════════════════════════════════════════════════════════"
 

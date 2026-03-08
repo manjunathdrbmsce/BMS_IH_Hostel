@@ -1,4 +1,4 @@
-# BMS Hostel — Loki Configuration
+# BMS International Hostel — Loki Configuration
 auth_enabled: false
 
 server:

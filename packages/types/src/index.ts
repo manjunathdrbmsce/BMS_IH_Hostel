@@ -1,5 +1,5 @@
 // ============================================================================
-// BMS Hostel Platform - Shared Types
+// BMS International Hostel Platform - Shared Types
 // Phase 0/1: Identity, Authentication, Authorization
 // ============================================================================
 

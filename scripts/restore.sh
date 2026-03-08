@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BMS Hostel — Database Restore Script
+# BMS International Hostel — Database Restore Script
 # Usage: ./scripts/restore.sh <backup-file.dump>
 # =============================================================================
 set -euo pipefail

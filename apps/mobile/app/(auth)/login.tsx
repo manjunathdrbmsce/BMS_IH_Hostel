@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Pressable,
   Dimensions,
+  Image,
 } from 'react-native';
 import Animated, {
   FadeInDown,
@@ -86,11 +87,13 @@ export default function LoginScreen() {
         style={styles.header}
       >
         <Animated.View entering={FadeInDown.delay(100).duration(600)} style={styles.headerContent}>
-          <View style={styles.logoContainer}>
-            <Ionicons name="business" size={36} color="#FFFFFF" />
-          </View>
-          <Text style={styles.headerTitle}>BMS Hostel</Text>
-          <Text style={styles.headerSubtitle}>Building Management System</Text>
+          <Image
+            source={require('../../assets/images/logo.svg')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
+          <Text style={styles.headerTitle}>BMS International Hostel</Text>
+          <Text style={styles.headerSubtitle}>Hostel Management System</Text>
         </Animated.View>
       </LinearGradient>
 
@@ -189,6 +192,12 @@ const styles = StyleSheet.create({
   },
   headerContent: {
     alignItems: 'center',
+  },
+  logoImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 16,
+    marginBottom: 16,
   },
   logoContainer: {
     width: 72,

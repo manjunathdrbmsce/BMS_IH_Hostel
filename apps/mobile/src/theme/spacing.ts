@@ -1,5 +1,5 @@
 /**
- * BMS Hostel — Spacing & Layout Scale (4px base unit)
+ * BMS International Hostel — Spacing & Layout Scale (4px base unit)
  */
 
 export const spacing = {

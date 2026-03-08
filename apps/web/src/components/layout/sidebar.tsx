@@ -74,13 +74,11 @@ export function Sidebar() {
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 h-16 border-b border-gray-100">
-        <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shrink-0">
-          <Shield className="w-5 h-5 text-white" />
-        </div>
+        <img src="/logo.svg" alt="BMS Logo" className="w-9 h-9 rounded-lg shrink-0 object-contain" />
         {!collapsed && (
           <div className="overflow-hidden">
-            <h1 className="text-base font-bold text-gray-900 leading-tight">
-              BMS Hostel
+            <h1 className="text-sm font-bold text-gray-900 leading-tight">
+              BMS International Hostel
             </h1>
             <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">
               Management Platform

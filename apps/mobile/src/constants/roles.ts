@@ -1,5 +1,5 @@
 /**
- * BMS Hostel RBAC role constants.
+ * BMS International Hostel RBAC role constants.
  * Must match the backend Prisma `Role` enum.
  */
 export const Role = {

@@ -1,5 +1,5 @@
 # =============================================================================
-# BMS Hostel Web — Production Dockerfile
+# BMS International Hostel Web — Production Dockerfile
 # Multi-stage build for Next.js standalone output
 # =============================================================================
 

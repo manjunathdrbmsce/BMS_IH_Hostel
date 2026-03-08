@@ -91,7 +91,7 @@ export class WhatsAppService implements OnModuleInit {
                 types: {
                     'twilio/quick-reply': {
                         body:
-                            '🏫 *BMS Hostel — Leave Approval Request*\n\n' +
+                            '🏫 *BMS International Hostel — Leave Approval Request*\n\n' +
                             'Your ward *{{1}}* has applied for leave:\n\n' +
                             '📋 *Type:* {{2}}\n' +
                             '📅 *From:* {{3}}\n' +
@@ -209,7 +209,7 @@ export class WhatsAppService implements OnModuleInit {
 
         // ── Fallback: plain text message ──
         const body =
-            `🏫 *BMS Hostel — Leave Approval Request*\n\n` +
+            `🏫 *BMS International Hostel — Leave Approval Request*\n\n` +
             `Your ward *${leaveDetails.studentName}* has applied for leave:\n\n` +
             `📋 *Type:* ${leaveDetails.leaveType}\n` +
             `📅 *From:* ${leaveDetails.fromDate}\n` +

@@ -1,5 +1,5 @@
 # =============================================================================
-# BMS Hostel — CI Pipeline
+# BMS International Hostel — CI Pipeline
 # Runs on every push & PR: lint, typecheck, test, build, security scan
 # =============================================================================
 name: CI

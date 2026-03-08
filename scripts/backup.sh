@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BMS Hostel — Database Backup Script
+# BMS International Hostel — Database Backup Script
 # Creates timestamped PostgreSQL backups with rotation
 # Usage: ./scripts/backup.sh [backup-name]
 # =============================================================================

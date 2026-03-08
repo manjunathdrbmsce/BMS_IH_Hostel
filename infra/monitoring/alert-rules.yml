@@ -1,4 +1,4 @@
-# BMS Hostel — Prometheus Alert Rules
+# BMS International Hostel — Prometheus Alert Rules
 groups:
   - name: bms_api
     interval: 30s
@@ -10,7 +10,7 @@ groups:
           severity: critical
         annotations:
           summary: 'BMS API is down'
-          description: 'The BMS Hostel API has been unreachable for more than 1 minute.'
+          description: 'The BMS International Hostel API has been unreachable for more than 1 minute.'
 
       - alert: APIHighResponseTime
         expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="bms-api"}[5m])) > 2

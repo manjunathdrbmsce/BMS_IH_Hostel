@@ -97,7 +97,7 @@ export class WhatsAppWebhookController {
                 this.logger.warn(`No parent user found for phone: ${phoneNumber}`);
                 await this.whatsappService.sendMessage(
                     from,
-                    '❌ Your phone number is not registered as a parent in the BMS Hostel system.',
+                    '❌ Your phone number is not registered as a parent in the BMS International Hostel system.',
                 );
                 return res.status(200).send('<Response></Response>');
             }

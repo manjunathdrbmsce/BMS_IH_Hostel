@@ -138,7 +138,7 @@ export default function WardenProfile() {
           </TouchableOpacity>
         </Animated.View>
 
-        <Text style={[styles.version, { color: colors.textTertiary }]}>BMS Hostel v0.2.0</Text>
+        <Text style={[styles.version, { color: colors.textTertiary }]}>BMS International Hostel v0.2.0</Text>
       </ScrollView>
     </View>
   );

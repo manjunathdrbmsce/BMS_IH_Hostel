@@ -1,4 +1,4 @@
-# BMS Hostel — Deployment & Operations Guide
+# BMS International Hostel — Deployment & Operations Guide
 
 ## Table of Contents
 

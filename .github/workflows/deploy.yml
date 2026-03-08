@@ -1,5 +1,5 @@
 # =============================================================================
-# BMS Hostel — CD Pipeline (Deploy to Production)
+# BMS International Hostel — CD Pipeline (Deploy to Production)
 # Triggered: manually via workflow_dispatch, or auto on main push after CI passes
 # =============================================================================
 name: Deploy

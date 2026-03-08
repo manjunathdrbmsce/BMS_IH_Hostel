@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BMS Hostel — Status / Health Dashboard (CLI)
+# BMS International Hostel — Status / Health Dashboard (CLI)
 # Usage: ./scripts/status.sh
 # =============================================================================
 set -euo pipefail
@@ -19,7 +19,7 @@ NC='\033[0m'
 
 echo -e "${CYAN}"
 echo "╔═══════════════════════════════════════════════════════════════╗"
-echo "║              BMS Hostel — System Status                      ║"
+echo "║              BMS International Hostel — System Status          ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 

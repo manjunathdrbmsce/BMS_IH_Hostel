@@ -1,5 +1,5 @@
 // =============================================================================
-// BMS Hostel Platform - Enterprise-Grade Seed Script
+// BMS International Hostel Platform - Enterprise-Grade Seed Script
 // Generates realistic data across all roles for manual testing
 // =============================================================================
 
@@ -238,7 +238,7 @@ interface SeedUser {
 // ---------------------------------------------------------------------------
 async function main() {
   console.log('═══════════════════════════════════════════════════════');
-  console.log('  🏨 BMS Hostel Platform - Enterprise Seed');
+  console.log('  🏨 BMS International Hostel Platform - Enterprise Seed');
   console.log('═══════════════════════════════════════════════════════\n');
 
   const defaultHash = await bcrypt.hash('Password@123', 12);

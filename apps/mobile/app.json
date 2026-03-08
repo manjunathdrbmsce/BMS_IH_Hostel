@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "BMS Hostel",
+    "name": "BMS International Hostel",
     "slug": "bms-hostel",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -24,20 +24,20 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "BMS Hostel needs camera access to scan QR codes for attendance."
+          "cameraPermission": "BMS International Hostel needs camera access to scan QR codes for attendance."
         }
       ],
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "BMS Hostel uses your location to verify attendance proximity.",
-          "locationWhenInUsePermission": "BMS Hostel uses your location to verify attendance proximity."
+          "locationAlwaysAndWhenInUsePermission": "BMS International Hostel uses your location to verify attendance proximity.",
+          "locationWhenInUsePermission": "BMS International Hostel uses your location to verify attendance proximity."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "BMS Hostel needs photo access to attach images to complaints."
+          "photosPermission": "BMS International Hostel needs photo access to attach images to complaints."
         }
       ]
     ],

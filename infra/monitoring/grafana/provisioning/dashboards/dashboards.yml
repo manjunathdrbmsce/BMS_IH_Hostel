@@ -1,10 +1,10 @@
-# BMS Hostel — Grafana Dashboard Provisioning
+# BMS International Hostel — Grafana Dashboard Provisioning
 apiVersion: 1
 
 providers:
-  - name: BMS Hostel
+  - name: BMS International Hostel
     orgId: 1
-    folder: BMS Hostel
+    folder: BMS International Hostel
     type: file
     disableDeletion: false
     editable: true

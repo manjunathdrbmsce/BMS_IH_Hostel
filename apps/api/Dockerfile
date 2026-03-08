@@ -1,5 +1,5 @@
 # =============================================================================
-# BMS Hostel API — Production Dockerfile
+# BMS International Hostel API — Production Dockerfile
 # Multi-stage build for minimal image size
 # =============================================================================
 

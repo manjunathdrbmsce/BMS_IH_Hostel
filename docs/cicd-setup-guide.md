@@ -1,4 +1,4 @@
-# BMS Hostel — CI/CD Complete Automation Setup Guide
+# BMS International Hostel — CI/CD Complete Automation Setup Guide
 
 > Step-by-step guide to set up fully automated CI/CD from zero to production.
 

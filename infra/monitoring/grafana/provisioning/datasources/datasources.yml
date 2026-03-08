@@ -1,4 +1,4 @@
-# BMS Hostel — Grafana Datasource Provisioning
+# BMS International Hostel — Grafana Datasource Provisioning
 apiVersion: 1
 
 datasources:

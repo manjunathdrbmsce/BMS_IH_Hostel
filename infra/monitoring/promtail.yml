@@ -1,4 +1,4 @@
-# BMS Hostel — Promtail Configuration (Log Shipper → Loki)
+# BMS International Hostel — Promtail Configuration (Log Shipper → Loki)
 server:
   http_listen_port: 9080
   grpc_listen_port: 0

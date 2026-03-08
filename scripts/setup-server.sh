@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# BMS Hostel — Initial Server Setup
+# BMS International Hostel — Initial Server Setup
 # Run once on a fresh server to bootstrap the deployment environment
 # Usage: curl -sSL <raw-url>/scripts/setup-server.sh | bash
 # =============================================================================
@@ -17,7 +17,7 @@ DEPLOY_PATH="/opt/bms-hostel"
 DEPLOY_USER="deploy"
 
 log "═══════════════════════════════════════════════════════════════"
-log "  BMS Hostel — Server Setup"
+log "  BMS International Hostel — Server Setup"
 log "═══════════════════════════════════════════════════════════════"
 
 # ─── System Dependencies ─────────────────────────────────────────────────
@@ -78,7 +78,7 @@ fi
 # ─── System Tuning ──────────────────────────────────────────────────────
 log "Applying system tuning..."
 cat >> /etc/sysctl.conf <<'EOF'
-# BMS Hostel tuning
+# BMS International Hostel tuning
 vm.swappiness=10
 vm.overcommit_memory=1
 net.core.somaxconn=65535
