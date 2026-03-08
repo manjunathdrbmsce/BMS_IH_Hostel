@@ -1,0 +1,133 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "API Health",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "targets": [{ "expr": "up{job=\"bms-api\"}", "legendFormat": "API" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ]
+        }
+      }
+    },
+    {
+      "title": "PostgreSQL Health",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "targets": [{ "expr": "up{job=\"postgres\"}", "legendFormat": "PostgreSQL" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Redis Health",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "targets": [{ "expr": "up{job=\"redis\"}", "legendFormat": "Redis" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Active Alerts",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "targets": [{ "expr": "count(ALERTS{alertstate=\"firing\"})" }],
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "color": "green", "value": 0 }, { "color": "red", "value": 1 }] } } }
+    },
+    {
+      "title": "Container CPU Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [{ "expr": "rate(container_cpu_usage_seconds_total{name=~\"bms_.*\"}[5m]) * 100", "legendFormat": "{{ name }}" }],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "title": "Container Memory Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [{ "expr": "container_memory_usage_bytes{name=~\"bms_.*\"} / 1024 / 1024", "legendFormat": "{{ name }}" }],
+      "fieldConfig": { "defaults": { "unit": "decmbytes" } }
+    },
+    {
+      "title": "API Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 4 },
+      "targets": [{ "expr": "rate(http_requests_total{job=\"bms-api\"}[5m])", "legendFormat": "{{ method }} {{ status }}" }]
+    },
+    {
+      "title": "API Response Time (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 4 },
+      "targets": [{ "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"bms-api\"}[5m]))", "legendFormat": "p95" }],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "title": "PostgreSQL Active Connections",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
+      "targets": [{ "expr": "pg_stat_activity_count{datname=\"bms_hostel\"}", "legendFormat": "connections" }]
+    },
+    {
+      "title": "PostgreSQL Database Size",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 12 },
+      "targets": [{ "expr": "pg_database_size_bytes{datname=\"bms_hostel\"}" }],
+      "fieldConfig": { "defaults": { "unit": "decbytes" } }
+    },
+    {
+      "title": "Redis Memory Usage",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 4, "x": 12, "y": 12 },
+      "targets": [{ "expr": "redis_memory_used_bytes / redis_memory_max_bytes * 100" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "thresholds": { "steps": [{ "color": "green", "value": 0 }, { "color": "yellow", "value": 60 }, { "color": "red", "value": 85 }] } } }
+    },
+    {
+      "title": "Redis Operations/sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "targets": [{ "expr": "rate(redis_commands_processed_total[5m])", "legendFormat": "ops/sec" }]
+    },
+    {
+      "title": "Nginx Request Rate by Status",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 20 },
+      "targets": [
+        { "expr": "sum(rate(nginx_request_duration_count{status=~\"2..\"}[5m]))", "legendFormat": "2xx" },
+        { "expr": "sum(rate(nginx_request_duration_count{status=~\"4..\"}[5m]))", "legendFormat": "4xx" },
+        { "expr": "sum(rate(nginx_request_duration_count{status=~\"5..\"}[5m]))", "legendFormat": "5xx" }
+      ]
+    },
+    {
+      "title": "Recent Logs",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 28 },
+      "targets": [{ "expr": "{container=~\"bms_.*\"}", "refId": "A" }],
+      "datasource": "Loki",
+      "options": { "showTime": true, "showLabels": true, "showCommonLabels": false, "wrapLogMessage": true, "prettifyLogMessage": true, "enableLogDetails": true, "sortOrder": "Descending" }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["bms", "hostel", "production"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "BMS Hostel — Production Overview",
+  "uid": "bms-hostel-overview"
+}

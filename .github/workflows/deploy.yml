@@ -1,0 +1,192 @@
+# =============================================================================
+# BMS Hostel — CD Pipeline (Deploy to Production)
+# Triggered: manually via workflow_dispatch, or auto on main push after CI passes
+# =============================================================================
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      skip_backup:
+        description: 'Skip database backup before deploy'
+        required: false
+        default: false
+        type: boolean
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'production' }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Gate: Only deploy if CI passed
+  # ---------------------------------------------------------------------------
+  gate:
+    name: Deployment Gate
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.check.outputs.deploy }}
+      environment: ${{ steps.env.outputs.environment }}
+    steps:
+      - name: Check trigger
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.workflow_run.conclusion }}" = "success" ]; then
+            echo "deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set environment
+        id: env
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          else
+            echo "environment=production" >> $GITHUB_OUTPUT
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Pre-deploy: Backup database
+  # ---------------------------------------------------------------------------
+  backup:
+    name: Database Backup
+    runs-on: ubuntu-latest
+    needs: gate
+    if: needs.gate.outputs.should_deploy == 'true' && github.event.inputs.skip_backup != 'true'
+    environment: ${{ needs.gate.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Backup database via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+          script: |
+            cd ${{ vars.DEPLOY_PATH || '/opt/bms-hostel' }}
+            ./scripts/backup.sh
+
+  # ---------------------------------------------------------------------------
+  # Deploy
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to ${{ needs.gate.outputs.environment }}
+    runs-on: ubuntu-latest
+    needs: [gate, backup]
+    if: |
+      always() &&
+      needs.gate.outputs.should_deploy == 'true' &&
+      (needs.backup.result == 'success' || needs.backup.result == 'skipped')
+    environment:
+      name: ${{ needs.gate.outputs.environment }}
+      url: ${{ vars.APP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+          script: |
+            cd ${{ vars.DEPLOY_PATH || '/opt/bms-hostel' }}
+            ./scripts/deploy.sh ${{ github.sha }}
+
+  # ---------------------------------------------------------------------------
+  # Post-deploy: Health check & Smoke test
+  # ---------------------------------------------------------------------------
+  verify:
+    name: Post-deploy Verification
+    runs-on: ubuntu-latest
+    needs: [gate, deploy]
+    if: needs.deploy.result == 'success'
+    steps:
+      - name: Wait for services
+        run: sleep 30
+
+      - name: Health check — API
+        run: |
+          for i in $(seq 1 10); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" "${{ vars.API_URL }}/api/v1/health" || echo "000")
+            if [ "$status" = "200" ]; then
+              echo "API health check passed"
+              exit 0
+            fi
+            echo "Attempt $i: API returned $status, retrying in 10s..."
+            sleep 10
+          done
+          echo "API health check failed after 10 attempts"
+          exit 1
+
+      - name: Health check — Web
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" "${{ vars.APP_URL }}" || echo "000")
+          if [ "$status" = "200" ]; then
+            echo "Web health check passed"
+          else
+            echo "Web returned $status"
+            exit 1
+          fi
+
+      - name: Smoke test — Login endpoint
+        run: |
+          response=$(curl -s -w "\n%{http_code}" -X POST "${{ vars.API_URL }}/api/v1/auth/login" \
+            -H "Content-Type: application/json" \
+            -d '{"identifier":"smoke-test-invalid@bms.hostel","password":"NotARealPassword1!"}')
+          status=$(echo "$response" | tail -1)
+          if [ "$status" = "401" ] || [ "$status" = "400" ]; then
+            echo "Smoke test passed (auth endpoint responding correctly)"
+          else
+            echo "Unexpected status: $status"
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Rollback (if verification fails)
+  # ---------------------------------------------------------------------------
+  rollback:
+    name: Rollback
+    runs-on: ubuntu-latest
+    needs: [gate, deploy, verify]
+    if: failure() && needs.deploy.result == 'success'
+    environment: ${{ needs.gate.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rollback via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+          script: |
+            cd ${{ vars.DEPLOY_PATH || '/opt/bms-hostel' }}
+            ./scripts/rollback.sh
+
+      - name: Notify rollback
+        if: always()
+        run: echo "::warning::Deployment rolled back due to failed verification"

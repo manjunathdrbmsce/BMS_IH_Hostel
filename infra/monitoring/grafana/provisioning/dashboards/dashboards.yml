@@ -1,0 +1,13 @@
+# BMS Hostel — Grafana Dashboard Provisioning
+apiVersion: 1
+
+providers:
+  - name: BMS Hostel
+    orgId: 1
+    folder: BMS Hostel
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

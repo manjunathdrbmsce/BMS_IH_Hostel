@@ -1,0 +1,57 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Git
+.git
+.gitignore
+
+# Build artifacts
+apps/web/.next
+apps/mobile/android/build
+apps/mobile/android/.gradle
+coverage
+*.tsbuildinfo
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Environment
+.env
+.env.*
+!.env.production.example
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Test
+test-app/
+**/*.test.ts
+**/*.spec.ts
+**/*.e2e-spec.ts
+jest.config.*
+
+# Infra (not needed in app images)
+infra/
+scripts/
+backups/
+rollback/
+logs/
+
+# CI
+.github/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads (bind-mounted in production)
+apps/api/uploads/
+
+# Turbo
+.turbo

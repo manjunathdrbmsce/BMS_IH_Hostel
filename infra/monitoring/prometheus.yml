@@ -1,0 +1,62 @@
+# BMS Hostel — Prometheus Configuration
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+alerting:
+  alertmanagers: []
+  # Uncomment when Alertmanager is configured:
+  # alertmanagers:
+  #   - static_configs:
+  #       - targets: ['alertmanager:9093']
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # BMS API health & metrics
+  - job_name: 'bms-api'
+    metrics_path: /api/v1/health
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['api:3001']
+        labels:
+          service: 'api'
+          environment: 'production'
+
+  # Nginx metrics (via stub_status module)
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx:80']
+        labels:
+          service: 'nginx'
+
+  # PostgreSQL metrics
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgres'
+          environment: 'production'
+
+  # Redis metrics
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'redis'
+          environment: 'production'
+
+  # Container metrics (cAdvisor)
+  - job_name: 'cadvisor'
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: 'cadvisor'

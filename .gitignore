@@ -49,3 +49,10 @@ docker-data/
 
 # Uploads (user-generated content)
 apps/api/uploads/
+
+# Production / Deployment
+.env.production
+backups/
+rollback/
+logs/
+infra/nginx/ssl/
