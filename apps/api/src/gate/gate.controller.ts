@@ -9,6 +9,7 @@ import {
   UseGuards,
   UseInterceptors,
   ParseUUIDPipe,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -78,8 +79,11 @@ export class GateController {
   @ApiResponse({ status: 201, description: 'Gate pass created' })
   async createPass(@Body() dto: CreateGatePassDto, @CurrentUser() user: any) {
     // Students can only request passes for themselves
-    if (user.roles?.some((r: any) => r.name === 'STUDENT')) {
+    if (user.roles?.includes('STUDENT')) {
       dto.studentId = user.id;
+    }
+    if (!dto.studentId) {
+      throw new ForbiddenException('studentId is required');
     }
     const pass = await this.gateService.createPass(dto, user.id);
     return { success: true, data: pass };
@@ -91,7 +95,7 @@ export class GateController {
   @ApiResponse({ status: 200, description: 'Gate passes list' })
   async findPasses(@Query() query: ListGatePassesQueryDto, @CurrentUser() user: any) {
     // Students can only see their own passes
-    if (user.roles?.some((r: any) => r.name === 'STUDENT')) {
+    if (user.roles?.includes('STUDENT')) {
       query.studentId = user.id;
     }
     const result = await this.gateService.findPasses(query);
@@ -105,8 +109,8 @@ export class GateController {
   async findPass(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     const pass = await this.gateService.findPassById(id);
     // Students can only view their own passes
-    if (user.roles?.some((r: any) => r.name === 'STUDENT') && pass.studentId !== user.id) {
-      return { success: false, message: 'Forbidden' };
+    if (user.roles?.includes('STUDENT') && pass.studentId !== user.id) {
+      throw new ForbiddenException('You can only view your own gate passes');
     }
     return { success: true, data: pass };
   }

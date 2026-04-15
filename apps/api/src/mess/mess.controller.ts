@@ -48,7 +48,7 @@ export class MessController {
   }
 
   @Get('menus')
-  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'MESS_MANAGER', 'WARDEN')
+  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'MESS_MANAGER', 'WARDEN', 'STUDENT')
   @ApiOperation({ summary: 'List menus with filters' })
   @ApiResponse({ status: 200, description: 'Menus list' })
   async findMenus(@Query() query: QueryMenuDto) {
@@ -57,7 +57,7 @@ export class MessController {
   }
 
   @Get('menus/:id')
-  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'MESS_MANAGER', 'WARDEN')
+  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'MESS_MANAGER', 'WARDEN', 'STUDENT')
   @ApiOperation({ summary: 'Get menu by ID with all items' })
   @ApiResponse({ status: 200, description: 'Menu details' })
   async findMenu(@Param('id', ParseUUIDPipe) id: string) {

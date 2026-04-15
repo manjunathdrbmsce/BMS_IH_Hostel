@@ -331,8 +331,9 @@ export class GateService {
   // -----------------------------------------------------------------------
 
   async createPass(dto: CreateGatePassDto, approvedById: string | null) {
+    const studentId = dto.studentId!;
     const student = await this.prisma.user.findUnique({
-      where: { id: dto.studentId },
+      where: { id: studentId },
     });
     if (!student) {
       throw new NotFoundException('Student not found');
@@ -346,7 +347,7 @@ export class GateService {
 
     const pass = await this.prisma.gatePass.create({
       data: {
-        studentId: dto.studentId,
+        studentId,
         purpose: dto.purpose.trim(),
         visitorName: dto.visitorName?.trim() || null,
         visitorPhone: dto.visitorPhone?.trim() || null,

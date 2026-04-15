@@ -47,9 +47,10 @@ export class CreateGateEntryDto {
 // ---------------------------------------------------------------------------
 
 export class CreateGatePassDto {
-  @ApiProperty({ description: 'Student user ID' })
+  @ApiPropertyOptional({ description: 'Student user ID (required for non-student roles, auto-filled for students)' })
+  @IsOptional()
   @IsUUID()
-  studentId: string;
+  studentId?: string;
 
   @ApiProperty({ example: 'Medical appointment at hospital' })
   @IsString()

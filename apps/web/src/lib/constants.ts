@@ -120,7 +120,7 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Gate Management',
         href: '/dashboard/gate',
         icon: 'ScanLine',
-        roles: ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'SECURITY_GUARD'],
+        roles: ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'SECURITY_GUARD', 'STUDENT'],
       },
       {
         label: 'Attendance',
@@ -186,7 +186,7 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Menus',
         href: '/dashboard/mess/menus',
         icon: 'UtensilsCrossed',
-        roles: ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'MESS_MANAGER'],
+        roles: ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'MESS_MANAGER', 'WARDEN', 'STUDENT'],
       },
       {
         label: 'Scan Station',
@@ -204,7 +204,7 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Rebates',
         href: '/dashboard/mess/rebates',
         icon: 'CalendarOff',
-        roles: ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN'],
+        roles: ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'STUDENT'],
       },
       {
         label: 'Feedback',

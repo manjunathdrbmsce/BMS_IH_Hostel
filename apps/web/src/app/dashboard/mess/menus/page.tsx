@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { MEAL_TYPES, MESS_TYPES, DAYS_OF_WEEK, MENU_STATUSES } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +25,8 @@ const statusBadge: Record<string, 'default' | 'success' | 'danger' | 'info'> = {
 
 export default function MenusPage() {
   const { addToast } = useToast();
+  const { hasRole } = useAuth();
+  const canManage = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'MESS_MANAGER');
   const router = useRouter();
   const [menus, setMenus] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,8 +88,8 @@ export default function MenusPage() {
 
   return (
     <div className="min-h-screen">
-      <Topbar title="Mess Menus" subtitle="Create and manage weekly mess menus">
-        <Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4 mr-2" /> New Menu</Button>
+      <Topbar title="Mess Menus" subtitle="View weekly mess menus">
+        {canManage && <Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4 mr-2" /> New Menu</Button>}
       </Topbar>
 
       <div className="p-6 space-y-6 animate-in">

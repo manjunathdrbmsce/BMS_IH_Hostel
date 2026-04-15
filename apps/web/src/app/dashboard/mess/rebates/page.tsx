@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { REBATE_STATUSES } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,8 +12,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Pagination } from '@/components/ui/pagination';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
+import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
-import { CheckCircle2, XCircle, Clock, IndianRupee } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, IndianRupee, Plus } from 'lucide-react';
 
 const statusBadgeVariant: Record<string, string> = {
   PENDING: 'warning',
@@ -22,6 +24,9 @@ const statusBadgeVariant: Record<string, string> = {
 
 export default function RebatesPage() {
   const { addToast } = useToast();
+  const { hasRole, user } = useAuth();
+  const isStudent = hasRole('STUDENT');
+  const canReview = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN');
   const [rebates, setRebates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -31,6 +36,8 @@ export default function RebatesPage() {
   const [amount, setAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({ hostelId: '', fromDate: '', toDate: '', reason: '' });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -73,11 +80,27 @@ export default function RebatesPage() {
     setSubmitting(false);
   };
 
+  const handleCreateRebate = async () => {
+    setSubmitting(true);
+    try {
+      await api.post('/mess/rebates', createForm);
+      addToast({ type: 'success', title: 'Rebate request submitted' });
+      setShowCreate(false);
+      setCreateForm({ hostelId: '', fromDate: '', toDate: '', reason: '' });
+      fetchData();
+    } catch (e: any) {
+      addToast({ type: 'error', title: e instanceof Error ? e.message : 'Failed to submit rebate request' });
+    }
+    setSubmitting(false);
+  };
+
   const fmtDate = (d: string) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
   return (
     <div className="min-h-screen">
-      <Topbar title="Rebates" subtitle="Manage mess rebate requests" />
+      <Topbar title={isStudent ? 'My Rebates' : 'Rebates'} subtitle={isStudent ? 'Request and track mess rebates' : 'Manage mess rebate requests'}>
+        {isStudent && <Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4 mr-2" /> Request Rebate</Button>}
+      </Topbar>
 
       <div className="p-6 space-y-6 animate-in">
         <Card>
@@ -121,7 +144,7 @@ export default function RebatesPage() {
                       <p className="text-xs text-indigo-600">Linked to leave: {fmtDate(r.leaveRequest.fromDate)} — {fmtDate(r.leaveRequest.toDate)}</p>
                     )}
                   </div>
-                  {r.status === 'PENDING' && (
+                  {canReview && r.status === 'PENDING' && (
                     <div className="flex gap-2 shrink-0">
                       <Button size="sm" onClick={() => { setReviewModal({ rebate: r, action: 'approve' }); setAmount(String(r.totalMeals * 50)); }}>
                         <CheckCircle2 className="h-4 w-4 mr-1" /> Approve
@@ -175,6 +198,25 @@ export default function RebatesPage() {
           </div>
         </div>
       )}
+
+      {/* Student Create Rebate Modal */}
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Request Mess Rebate" size="lg">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">Request a rebate for meals missed during leave or absence.</p>
+          <Input placeholder="Hostel ID" value={createForm.hostelId} onChange={(e) => setCreateForm({ ...createForm, hostelId: e.target.value })} />
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="text-xs font-medium text-gray-500">From Date</label><Input type="date" value={createForm.fromDate} onChange={(e) => setCreateForm({ ...createForm, fromDate: e.target.value })} /></div>
+            <div><label className="text-xs font-medium text-gray-500">To Date</label><Input type="date" value={createForm.toDate} onChange={(e) => setCreateForm({ ...createForm, toDate: e.target.value })} /></div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500">Reason</label>
+            <textarea value={createForm.reason} onChange={(e) => setCreateForm({ ...createForm, reason: e.target.value })} rows={3} placeholder="e.g., Home leave for family function" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none" />
+          </div>
+          <Button onClick={handleCreateRebate} disabled={submitting || !createForm.hostelId || !createForm.fromDate || !createForm.toDate || !createForm.reason} className="w-full">
+            {submitting ? 'Submitting...' : 'Submit Rebate Request'}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

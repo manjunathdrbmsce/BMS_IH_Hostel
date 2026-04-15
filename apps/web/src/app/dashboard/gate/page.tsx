@@ -29,9 +29,11 @@ const passStatusBadge: Record<string, 'default' | 'success' | 'danger' | 'info'>
 };
 
 export default function GatePage() {
-  const { hasRole } = useAuth();
+  const { hasRole, user } = useAuth();
   const { addToast } = useToast();
-  const [tab, setTab] = useState<TabType>('entries');
+  const isStudent = hasRole('STUDENT');
+  const canViewEntries = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'SECURITY_GUARD');
+  const [tab, setTab] = useState<TabType>(isStudent ? 'passes' : 'entries');
   const [entries, setEntries] = useState<any[]>([]);
   const [passes, setPasses] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -46,9 +48,10 @@ export default function GatePage() {
   const [showCreatePass, setShowCreatePass] = useState(false);
   const [showDetail, setShowDetail] = useState<any>(null);
   const [entryForm, setEntryForm] = useState({ studentId: '', type: 'IN', gateNo: 'Gate-1', linkedLeaveId: '', notes: '' });
-  const [passForm, setPassForm] = useState({ studentId: '', purpose: '', visitorName: '', visitorPhone: '', validFrom: '', validTo: '' });
+  const [passForm, setPassForm] = useState({ studentId: '', purpose: '', visitorName: '', visitorPhone: '', outDate: '', outTime: '', returnDate: '', returnTime: '' });
 
   const canManage = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'SECURITY_GUARD');
+  const canCreatePass = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -97,13 +100,21 @@ export default function GatePage() {
 
   const handleCreatePass = async () => {
     try {
-      await api.post<any>('/gate/passes', passForm);
+      const payload: any = {
+        purpose: passForm.purpose,
+        validFrom: passForm.outDate && passForm.outTime ? new Date(`${passForm.outDate}T${passForm.outTime}`).toISOString() : '',
+        validTo: passForm.returnDate && passForm.returnTime ? new Date(`${passForm.returnDate}T${passForm.returnTime}`).toISOString() : '',
+      };
+      if (!isStudent) payload.studentId = passForm.studentId;
+      if (passForm.visitorName) payload.visitorName = passForm.visitorName;
+      if (passForm.visitorPhone) payload.visitorPhone = passForm.visitorPhone;
+      await api.post<any>('/gate/passes', payload);
       setShowCreatePass(false);
-      setPassForm({ studentId: '', purpose: '', visitorName: '', visitorPhone: '', validFrom: '', validTo: '' });
+      setPassForm({ studentId: '', purpose: '', visitorName: '', visitorPhone: '', outDate: '', outTime: '', returnDate: '', returnTime: '' });
       fetchData();
-      addToast({ type: 'success', title: 'Gate pass issued' });
+      addToast({ type: 'success', title: isStudent ? 'Gate pass requested' : 'Gate pass issued' });
     } catch (err: unknown) {
-      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to issue pass' });
+      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to request pass' });
     }
   };
 
@@ -135,10 +146,19 @@ export default function GatePage() {
 
   return (
     <div className="min-h-screen">
-      <Topbar title="Gate Management" subtitle="Entry/exit logs and gate passes">
+      <Topbar title={isStudent ? 'Gate Passes' : 'Gate Management'} subtitle={isStudent ? 'View and request gate passes' : 'Entry/exit logs and gate passes'}>
         <div className="flex gap-2">
           {canManage && <Button onClick={() => setShowCreateEntry(true)}><ScanLine className="h-4 w-4 mr-2" /> Log Entry</Button>}
-          {canManage && <Button onClick={() => setShowCreatePass(true)} variant="outline"><Ticket className="h-4 w-4 mr-2" /> Gate Pass</Button>}
+          {canCreatePass && <Button onClick={() => {
+            // Pre-fill times: going out = now (rounded to next 15 min), return = 4 hours later
+            const now = new Date();
+            now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
+            const ret = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+            const fmtD = (d: Date) => d.toISOString().slice(0, 10);
+            const fmtT = (d: Date) => d.toTimeString().slice(0, 5);
+            setPassForm({ studentId: '', purpose: '', visitorName: '', visitorPhone: '', outDate: fmtD(now), outTime: fmtT(now), returnDate: fmtD(ret), returnTime: fmtT(ret) });
+            setShowCreatePass(true);
+          }} variant={canManage ? 'outline' : 'primary'}><Ticket className="h-4 w-4 mr-2" /> {isStudent ? 'Request Pass' : 'Gate Pass'}</Button>}
         </div>
       </Topbar>
 
@@ -162,9 +182,11 @@ export default function GatePage() {
         {/* Tabs */}
         <Card>
           <div className="flex border-b -mx-6 -mt-6 px-6">
-            <button onClick={() => setTab('entries')} className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${tab === 'entries' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-              <ScanLine className="h-4 w-4 inline mr-1.5" /> Entry/Exit Log
-            </button>
+            {canViewEntries && (
+              <button onClick={() => setTab('entries')} className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${tab === 'entries' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                <ScanLine className="h-4 w-4 inline mr-1.5" /> Entry/Exit Log
+              </button>
+            )}
             <button onClick={() => setTab('passes')} className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${tab === 'passes' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
               <Ticket className="h-4 w-4 inline mr-1.5" /> Gate Passes
             </button>
@@ -276,19 +298,27 @@ export default function GatePage() {
       </Modal>
 
       {/* Create Pass Modal */}
-      <Modal open={showCreatePass} onClose={() => setShowCreatePass(false)} title="Issue Gate Pass" size="lg">
+      <Modal open={showCreatePass} onClose={() => setShowCreatePass(false)} title={isStudent ? 'Request Gate Pass' : 'Issue Gate Pass'} size="lg">
         <div className="space-y-4">
-          <Input placeholder="Student User ID" value={passForm.studentId} onChange={(e) => setPassForm({ ...passForm, studentId: e.target.value })} />
-          <Input placeholder="Purpose" value={passForm.purpose} onChange={(e) => setPassForm({ ...passForm, purpose: e.target.value })} />
+          {!isStudent && <Input placeholder="Student User ID" value={passForm.studentId} onChange={(e) => setPassForm({ ...passForm, studentId: e.target.value })} />}
+          <Input placeholder="Purpose (e.g., Medical visit, Library, Shopping)" value={passForm.purpose} onChange={(e) => setPassForm({ ...passForm, purpose: e.target.value })} />
           <div className="grid grid-cols-2 gap-3">
             <Input placeholder="Visitor Name (optional)" value={passForm.visitorName} onChange={(e) => setPassForm({ ...passForm, visitorName: e.target.value })} />
             <Input placeholder="Visitor Phone (optional)" value={passForm.visitorPhone} onChange={(e) => setPassForm({ ...passForm, visitorPhone: e.target.value })} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-xs text-gray-500">Valid From</label><Input type="datetime-local" value={passForm.validFrom} onChange={(e) => setPassForm({ ...passForm, validFrom: e.target.value })} /></div>
-            <div><label className="text-xs text-gray-500">Valid To</label><Input type="datetime-local" value={passForm.validTo} onChange={(e) => setPassForm({ ...passForm, validTo: e.target.value })} /></div>
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Going Out</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-xs text-gray-500">Time</label><Input type="time" value={passForm.outTime} onChange={(e) => setPassForm({ ...passForm, outTime: e.target.value })} /></div>
+              <div><label className="text-xs text-gray-500">Date</label><Input type="date" value={passForm.outDate} onChange={(e) => setPassForm({ ...passForm, outDate: e.target.value })} /></div>
+            </div>
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Expected Return</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-xs text-gray-500">Time</label><Input type="time" value={passForm.returnTime} onChange={(e) => setPassForm({ ...passForm, returnTime: e.target.value })} /></div>
+              <div><label className="text-xs text-gray-500">Date</label><Input type="date" value={passForm.returnDate} onChange={(e) => setPassForm({ ...passForm, returnDate: e.target.value })} /></div>
+            </div>
           </div>
-          <Button onClick={handleCreatePass} className="w-full">Issue Pass</Button>
+          <Button onClick={handleCreatePass} className="w-full">{isStudent ? 'Request Pass' : 'Issue Pass'}</Button>
         </div>
       </Modal>
 
