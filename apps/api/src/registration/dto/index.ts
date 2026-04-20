@@ -12,6 +12,8 @@ import {
   Max,
   MaxLength,
   MinLength,
+  ValidateNested,
+  IsDefined,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
@@ -366,54 +368,88 @@ export class CreateRegistrationDto {
 export class SaveDraftDto {
   @ApiPropertyOptional()
   @IsOptional()
+  @ValidateNested()
+  @Type(() => PersonalDetailsDto)
   personalDetails?: PersonalDetailsDto;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @ValidateNested()
+  @Type(() => AcademicDetailsDto)
   academicDetails?: AcademicDetailsDto;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @ValidateNested()
+  @Type(() => FamilyDetailsDto)
   familyDetails?: FamilyDetailsDto;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @ValidateNested()
+  @Type(() => AddressGuardianDto)
   addressGuardian?: AddressGuardianDto;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @ValidateNested()
+  @Type(() => DocumentsDto)
   documents?: DocumentsDto;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @ValidateNested()
+  @Type(() => DeclarationsDto)
   declarations?: DeclarationsDto;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateRegistrationDto)
   registration?: CreateRegistrationDto;
 }
 
 export class SubmitRegistrationDto {
   @ApiProperty()
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => PersonalDetailsDto)
   personalDetails: PersonalDetailsDto;
 
   @ApiProperty()
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => AcademicDetailsDto)
   academicDetails: AcademicDetailsDto;
 
   @ApiProperty()
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => FamilyDetailsDto)
   familyDetails: FamilyDetailsDto;
 
   @ApiProperty()
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => AddressGuardianDto)
   addressGuardian: AddressGuardianDto;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @ValidateNested()
+  @Type(() => DocumentsDto)
   documents?: DocumentsDto;
 
   @ApiProperty()
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => DeclarationsDto)
   declarations: DeclarationsDto;
 
   @ApiProperty()
+  @IsDefined()
+  @ValidateNested()
+  @Type(() => CreateRegistrationDto)
   registration: CreateRegistrationDto;
 }
 

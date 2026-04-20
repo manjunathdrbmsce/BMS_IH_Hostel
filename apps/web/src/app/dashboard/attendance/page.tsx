@@ -97,11 +97,11 @@ export default function AttendancePage() {
                     <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
                         Attendance Management
                     </h1>
-                    <p className="text-sm text-slate-500 mt-1">
+                    <p className="text-sm text-slate-600 mt-1">
                         {isStudent ? 'Track your attendance, scan QR codes, and manage devices' : 'Anti-proxy attendance tracking with real-time monitoring'}
                     </p>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-slate-400">
+                <div className="flex items-center gap-2 text-xs text-slate-500">
                     <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                     Live
                 </div>
@@ -115,7 +115,7 @@ export default function AttendancePage() {
                         onClick={() => setActiveTab(tab.key)}
                         className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${activeTab === tab.key
                             ? 'bg-white text-indigo-700 shadow-sm shadow-indigo-100 ring-1 ring-indigo-100'
-                            : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'
+                            : 'text-slate-600 hover:text-slate-800 hover:bg-white/60'
                             }`}
                     >
                         {tab.label}
@@ -331,7 +331,7 @@ function DailyRecordsTab() {
         <div className="space-y-5">
             <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded-2xl border border-slate-200/60 shadow-sm">
                 <div className="flex items-center gap-2">
-                    <label className="text-sm font-medium text-slate-600">Date</label>
+                    <label className="text-sm font-medium text-slate-700">Date</label>
                     <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
                         className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all" />
                 </div>
@@ -339,7 +339,7 @@ function DailyRecordsTab() {
                     <input type="text" placeholder="Search by name or USN..." value={search} onChange={(e) => setSearch(e.target.value)}
                         className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none transition-all" />
                 </div>
-                <span className="text-xs text-slate-400 ml-auto">{meta.total} records</span>
+                <span className="text-xs text-slate-600 ml-auto">{meta.total} records</span>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
@@ -361,12 +361,12 @@ function DailyRecordsTab() {
                             {records.map((r) => (
                                 <tr key={r.id} className="hover:bg-indigo-50/30 transition-colors">
                                     <td className="px-5 py-3.5 font-medium text-slate-800">{r.student.firstName} {r.student.lastName}</td>
-                                    <td className="px-5 py-3.5 text-slate-500 font-mono text-xs">{r.student.usn || '—'}</td>
-                                    <td className="px-5 py-3.5 text-slate-500">{r.student.bedAssignments?.[0]?.bed?.room?.roomNo || '—'}</td>
+                                    <td className="px-5 py-3.5 text-slate-700 font-mono text-xs">{r.student.usn || '—'}</td>
+                                    <td className="px-5 py-3.5 text-slate-700">{r.student.bedAssignments?.[0]?.bed?.room?.roomNo || '—'}</td>
                                     <td className="px-5 py-3.5">{statusBadge(r.status)}</td>
-                                    <td className="px-5 py-3.5 text-slate-500">{r.firstIn ? new Date(r.firstIn).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                                    <td className="px-5 py-3.5 text-slate-500">{r.lastOut ? new Date(r.lastOut).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                                    <td className="px-5 py-3.5"><span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-500">{formatSource(r.source)}</span></td>
+                                    <td className="px-5 py-3.5 text-slate-700">{r.firstIn ? new Date(r.firstIn).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                                    <td className="px-5 py-3.5 text-slate-700">{r.lastOut ? new Date(r.lastOut).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                                    <td className="px-5 py-3.5"><span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700">{formatSource(r.source)}</span></td>
                                 </tr>
                             ))}
                         </tbody>
@@ -492,14 +492,14 @@ function RollCallTab() {
                     </div>
                     <div>
                         <h3 className="text-xl font-bold text-slate-800">Start Roll-Call Session</h3>
-                        <p className="text-sm text-slate-500 mt-2">
+                        <p className="text-sm text-slate-600 mt-2">
                             Display a rotating QR code for students to scan. GPS + device verification ensures anti-proxy attendance.
                         </p>
                     </div>
 
                     {/* Gap 10: Hostel Dropdown */}
                     <div className="flex items-center justify-center gap-3">
-                        <label className="text-sm text-slate-600">Hostel:</label>
+                        <label className="text-sm font-medium text-slate-700">Hostel:</label>
                         <select value={selectedHostel} onChange={(e) => setSelectedHostel(e.target.value)}
                             className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 outline-none min-w-[200px]">
                             {hostels.map((h) => (
@@ -509,7 +509,7 @@ function RollCallTab() {
                     </div>
 
                     <div className="flex items-center justify-center gap-3">
-                        <label className="text-sm text-slate-600">Duration:</label>
+                        <label className="text-sm font-medium text-slate-700">Duration:</label>
                         <select value={duration} onChange={(e) => setDuration(Number(e.target.value))}
                             className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 outline-none">
                             {[3, 5, 10, 15, 20, 30].map((m) => <option key={m} value={m}>{m} min</option>)}
@@ -569,16 +569,16 @@ function RollCallTab() {
                                     <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-indigo-600">{countdown}</span>
                                 </div>
                                 <div className="text-left">
-                                    <p className="text-xs text-slate-400">Token rotates every 30s</p>
+                                    <p className="text-xs text-slate-600">Token rotates every 30s</p>
                                     <p className="text-sm font-mono font-bold text-indigo-600">{qrToken}</p>
                                 </div>
                             </div>
-                            <p className="text-xs text-slate-400">Display this QR on projector for students to scan</p>
+                            <p className="text-xs text-slate-600">Display this QR on projector for students to scan</p>
                         </>
                     ) : (
                         <div className="py-12">
                             <span className="text-6xl">⏰</span>
-                            <p className="text-lg font-semibold text-slate-600 mt-4">Session {session.status.toLowerCase()}</p>
+                            <p className="text-lg font-semibold text-slate-800 mt-4">Session {session.status.toLowerCase()}</p>
                         </div>
                     )}
                 </div>
@@ -589,12 +589,12 @@ function RollCallTab() {
                     <div className="text-center space-y-2">
                         <p className="text-5xl font-bold text-indigo-600">
                             {liveData?.presentCount ?? session.presentCount}
-                            <span className="text-2xl text-slate-400">/{session.totalStudents}</span>
+                            <span className="text-2xl text-slate-600">/{session.totalStudents}</span>
                         </p>
-                        <p className="text-sm text-slate-500">students present</p>
+                        <p className="text-sm text-slate-700">students present</p>
                     </div>
                     <div className="space-y-2">
-                        <div className="flex justify-between text-xs text-slate-500">
+                        <div className="flex justify-between text-xs text-slate-700">
                             <span>{pct}% present</span>
                             <span>{session.totalStudents - (liveData?.presentCount || session.presentCount)} remaining</span>
                         </div>
@@ -604,10 +604,10 @@ function RollCallTab() {
                     </div>
                     {liveData?.attendance?.length > 0 && (
                         <div className="space-y-2 max-h-48 overflow-y-auto">
-                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Recent</p>
+                            <p className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Recent</p>
                             {liveData.attendance.slice(0, 8).map((a: any) => (
                                 <div key={a.id} className="flex items-center justify-between py-1.5 text-sm">
-                                    <span className="text-slate-700">{a.student.firstName} {a.student.lastName}</span>
+                                    <span className="text-slate-800 font-medium">{a.student.firstName} {a.student.lastName}</span>
                                     <span className="text-xs text-emerald-600 font-medium">✅ Present</span>
                                 </div>
                             ))}
@@ -736,7 +736,7 @@ function ScanQRTab({ userId }: { userId?: string }) {
                 </div>
                 <div>
                     <h3 className="text-xl font-bold text-slate-800">Scan Attendance QR</h3>
-                    <p className="text-sm text-slate-500 mt-2">
+                    <p className="text-sm text-slate-600 mt-2">
                         Point your camera at the QR code displayed by your warden to mark your attendance.
                     </p>
                 </div>
@@ -753,7 +753,7 @@ function ScanQRTab({ userId }: { userId?: string }) {
 
                 {scanning && (
                     <button onClick={stopScanner}
-                        className="w-full py-3 bg-slate-100 text-slate-600 font-semibold rounded-xl hover:bg-slate-200 transition-all">
+                        className="w-full py-3 bg-slate-100 text-slate-700 font-semibold rounded-xl hover:bg-slate-200 transition-all">
                         ✕ Stop Scanner
                     </button>
                 )}
@@ -773,9 +773,9 @@ function ScanQRTab({ userId }: { userId?: string }) {
             {/* Manual Entry Fallback — uses dropdown with session names, NOT raw IDs */}
             {!result && (
                 <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 space-y-4">
-                    <h4 className="text-sm font-semibold text-slate-600">Manual Entry (if camera unavailable)</h4>
+                    <h4 className="text-sm font-semibold text-slate-700">Manual Entry (if camera unavailable)</h4>
                     <div>
-                        <label className="text-xs text-slate-500 block mb-1">Active Session</label>
+                        <label className="text-xs text-slate-600 block mb-1">Active Session</label>
                         {loadingSessions ? (
                             <p className="text-xs text-slate-400 animate-pulse">Loading sessions...</p>
                         ) : activeSessions.length === 0 ? (
@@ -792,7 +792,7 @@ function ScanQRTab({ userId }: { userId?: string }) {
                         )}
                     </div>
                     <div>
-                        <label className="text-xs text-slate-500 block mb-1">Token (from warden&apos;s screen)</label>
+                        <label className="text-xs text-slate-600 block mb-1">Token (from warden&apos;s screen)</label>
                         <input type="text" placeholder="Enter the token shown on warden's screen" value={manualToken}
                             onChange={(e) => setManualToken(e.target.value)}
                             className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 outline-none" />

@@ -10,6 +10,7 @@ import {
   UseInterceptors,
   ParseUUIDPipe,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -26,6 +27,7 @@ import { AuditInterceptor } from '../audit/audit.interceptor';
 import { AuditAction } from '../audit/audit.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { hasRole } from '../auth/helpers';
+import { PrismaService } from '../prisma/prisma.service';
 
 @ApiTags('complaints')
 @Controller('complaints')
@@ -33,14 +35,38 @@ import { hasRole } from '../auth/helpers';
 @UseInterceptors(AuditInterceptor)
 @ApiBearerAuth('access-token')
 export class ComplaintsController {
-  constructor(private readonly complaintsService: ComplaintsService) { }
+  constructor(
+    private readonly complaintsService: ComplaintsService,
+    private readonly prisma: PrismaService,
+  ) { }
 
   @Post()
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT')
   @AuditAction('COMPLAINT_CREATE', 'complaints')
   @ApiOperation({ summary: 'File a new complaint' })
   @ApiResponse({ status: 201, description: 'Complaint created' })
-  async create(@Body() dto: CreateComplaintDto) {
+  async create(@Body() dto: CreateComplaintDto, @CurrentUser() user: any) {
+    // Auto-populate studentId and hostelId for STUDENT role from their JWT + bed assignment
+    if (hasRole(user, 'STUDENT')) {
+      dto.studentId = dto.studentId || user.sub || user.id;
+
+      if (!dto.hostelId) {
+        const activeBed = await this.prisma.bedAssignment.findFirst({
+          where: { studentId: dto.studentId, status: 'ACTIVE' },
+          include: { bed: { include: { room: true } } },
+        });
+        if (!activeBed) {
+          throw new BadRequestException('You do not have an active bed assignment. Only resident students can file complaints.');
+        }
+        dto.hostelId = activeBed.bed.room.hostelId;
+      }
+    } else {
+      // Admin/Warden/Staff must provide both studentId and hostelId
+      if (!dto.studentId || !dto.hostelId) {
+        throw new BadRequestException('studentId and hostelId are required when filing on behalf of a student.');
+      }
+    }
+
     const complaint = await this.complaintsService.create(dto);
     return { success: true, data: complaint };
   }

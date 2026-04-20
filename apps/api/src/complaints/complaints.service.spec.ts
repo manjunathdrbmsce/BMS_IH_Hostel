@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { ComplaintsService } from './complaints.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ComplaintCategory, ComplaintPriority, ComplaintStatus } from '@prisma/client';
@@ -19,6 +19,7 @@ const mockPrisma = {
   complaintComment: { create: jest.fn() },
   user: { findUnique: jest.fn() },
   hostel: { findUnique: jest.fn() },
+  bedAssignment: { findFirst: jest.fn() },
 };
 
 const mockComplaint = {
@@ -59,9 +60,10 @@ describe('ComplaintsService', () => {
   // create
   // -----------------------------------------------------------------------
   describe('create', () => {
-    it('should create a complaint', async () => {
+    it('should create a complaint when student has active bed in hostel', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-1' });
       mockPrisma.hostel.findUnique.mockResolvedValue({ id: 'h-1' });
+      mockPrisma.bedAssignment.findFirst.mockResolvedValue({ id: 'ba-1', status: 'ACTIVE' });
       mockPrisma.complaint.create.mockResolvedValue(mockComplaint);
       mockPrisma.complaint.findUnique.mockResolvedValue(mockComplaint);
 
@@ -70,7 +72,15 @@ describe('ComplaintsService', () => {
         subject: 'Broken door lock', description: 'Door lock is jammed', priority: 'MEDIUM',
       });
       expect(result.id).toBe('c-1');
-      expect(mockPrisma.complaint.create).toHaveBeenCalled();
+      expect(mockPrisma.bedAssignment.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            studentId: 'u-1',
+            status: 'ACTIVE',
+            bed: { room: { hostelId: 'h-1' } },
+          }),
+        }),
+      );
     });
 
     it('should throw if student not found', async () => {
@@ -79,6 +89,60 @@ describe('ComplaintsService', () => {
         studentId: 'bad', hostelId: 'h-1', category: 'MAINTENANCE',
         subject: 'test', description: 'test', priority: 'LOW',
       })).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw if hostel not found', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-1' });
+      mockPrisma.hostel.findUnique.mockResolvedValue(null);
+      await expect(service.create({
+        studentId: 'u-1', hostelId: 'bad', category: 'MAINTENANCE',
+        subject: 'test', description: 'test', priority: 'LOW',
+      })).rejects.toThrow(NotFoundException);
+    });
+
+    // Fix #6: Student must have an active bed assignment in the hostel
+    it('should throw BadRequestException if student has NO active bed in hostel (Fix #6)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-1' });
+      mockPrisma.hostel.findUnique.mockResolvedValue({ id: 'h-1' });
+      mockPrisma.bedAssignment.findFirst.mockResolvedValue(null); // no active bed
+
+      await expect(service.create({
+        studentId: 'u-1', hostelId: 'h-1', category: 'MAINTENANCE',
+        subject: 'test', description: 'test', priority: 'LOW',
+      })).rejects.toThrow(BadRequestException);
+    });
+
+    // Fix #6: Verify the bed assignment query checks the correct hostel
+    it('should check bed assignment in the specific hostel, not any hostel (Fix #6)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-1' });
+      mockPrisma.hostel.findUnique.mockResolvedValue({ id: 'h-2' });
+      mockPrisma.bedAssignment.findFirst.mockResolvedValue(null);
+
+      await expect(service.create({
+        studentId: 'u-1', hostelId: 'h-2', category: 'MAINTENANCE',
+        subject: 'test', description: 'test',
+      })).rejects.toThrow(BadRequestException);
+
+      // Verify the query includes the hostel filter
+      expect(mockPrisma.bedAssignment.findFirst).toHaveBeenCalledWith({
+        where: {
+          studentId: 'u-1',
+          status: 'ACTIVE',
+          bed: { room: { hostelId: 'h-2' } },
+        },
+      });
+    });
+
+    // Fix #6: Verify error message is descriptive
+    it('should include descriptive error message for non-resident student (Fix #6)', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'u-1' });
+      mockPrisma.hostel.findUnique.mockResolvedValue({ id: 'h-1' });
+      mockPrisma.bedAssignment.findFirst.mockResolvedValue(null);
+
+      await expect(service.create({
+        studentId: 'u-1', hostelId: 'h-1', category: 'MAINTENANCE',
+        subject: 'test', description: 'test',
+      })).rejects.toThrow(/active bed assignment/i);
     });
   });
 

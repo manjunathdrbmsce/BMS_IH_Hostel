@@ -59,7 +59,7 @@ export const lightColors = {
 
   textPrimary: palette.slate900,
   textSecondary: palette.slate600,
-  textTertiary: palette.slate400,
+  textTertiary: palette.slate500,
   textInverse: palette.white,
   textLink: palette.indigo600,
 

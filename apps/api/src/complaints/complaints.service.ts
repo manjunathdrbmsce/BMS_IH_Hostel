@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { Prisma, ComplaintStatus, ComplaintCategory, ComplaintPriority } from '@prisma/client';
@@ -29,6 +30,20 @@ export class ComplaintsService {
     });
     if (!hostel) {
       throw new NotFoundException('Hostel not found');
+    }
+
+    // Verify student has an active bed assignment in this hostel
+    const activeBed = await this.prisma.bedAssignment.findFirst({
+      where: {
+        studentId: dto.studentId,
+        status: 'ACTIVE',
+        bed: { room: { hostelId: dto.hostelId } },
+      },
+    });
+    if (!activeBed) {
+      throw new BadRequestException(
+        'Student does not have an active bed assignment in this hostel. Only resident students can file complaints.',
+      );
     }
 
     const complaint = await this.prisma.complaint.create({

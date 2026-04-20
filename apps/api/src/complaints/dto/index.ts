@@ -17,11 +17,13 @@ import { Type } from 'class-transformer';
 // ---------------------------------------------------------------------------
 
 export class CreateComplaintDto {
-  @ApiProperty({ description: 'Student user ID' })
+  @ApiPropertyOptional({ description: 'Student user ID (auto-populated for STUDENT role)' })
+  @IsOptional()
   @IsUUID()
   studentId: string;
 
-  @ApiProperty({ description: 'Hostel ID' })
+  @ApiPropertyOptional({ description: 'Hostel ID (auto-resolved from bed assignment for STUDENT role)' })
+  @IsOptional()
   @IsUUID()
   hostelId: string;
 

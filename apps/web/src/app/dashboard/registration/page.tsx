@@ -565,8 +565,18 @@ export default function RegistrationPage() {
           <h3 className="col-span-full text-lg font-semibold text-gray-900">Academic Details</h3>
           {renderInput('Department / Branch', 'academicDetails', 'department', { required: true })}
           {renderInput('Course (B.E. / B.Tech / M.Tech etc.)', 'academicDetails', 'course', { required: true })}
-          {renderInput('Year', 'academicDetails', 'year', { type: 'number', required: true })}
-          {renderInput('Semester', 'academicDetails', 'semester', { type: 'number', required: true })}
+          {renderSelect('Year', 'academicDetails', 'year', [
+            { value: '1', label: '1st Year' },
+            { value: '2', label: '2nd Year' },
+            { value: '3', label: '3rd Year' },
+            { value: '4', label: '4th Year' },
+            { value: '5', label: '5th Year' },
+            { value: '6', label: '6th Year' },
+          ], { required: true })}
+          {renderSelect('Semester', 'academicDetails', 'semester',
+            Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: `Semester ${i + 1}` })),
+            { required: true },
+          )}
           {renderInput('Date of Admission', 'academicDetails', 'admissionDate', { type: 'date' })}
         </div>
       );
@@ -920,7 +930,7 @@ export default function RegistrationPage() {
             : null;
           const DetailRow = ({ label, value }: { label: string; value: any }) => (
             <div>
-              <span className="text-xs text-gray-500">{label}</span>
+              <span className="text-xs font-medium text-gray-600">{label}</span>
               <p className="text-sm font-medium text-gray-900">{value || '—'}</p>
             </div>
           );

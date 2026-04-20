@@ -15,6 +15,7 @@ import { StatCardSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
 import { useToast } from '@/components/ui/toast';
+import { SearchPicker, SearchPickerOption } from '@/components/ui/search-picker';
 import {
   MessageSquareWarning, Plus, Search, AlertCircle, Clock, CheckCircle2, Wrench, Send,
 } from 'lucide-react';
@@ -53,6 +54,16 @@ export default function ComplaintsPage() {
 
   const isStudent = hasRole('STUDENT');
   const canManage = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN');
+
+  const searchStudents = useCallback(async (q: string): Promise<SearchPickerOption[]> => {
+    const res = await api.get<any>(`/users?search=${encodeURIComponent(q)}&role=STUDENT&limit=10`);
+    return (res.data || []).map((u: any) => ({ value: u.id, label: `${u.firstName} ${u.lastName}`, sublabel: [u.usn, u.email].filter(Boolean).join(' · ') }));
+  }, []);
+
+  const searchHostels = useCallback(async (q: string): Promise<SearchPickerOption[]> => {
+    const res = await api.get<any>(`/hostels?limit=50`);
+    return (res.data || []).filter((h: any) => h.name.toLowerCase().includes(q.toLowerCase()) || h.code?.toLowerCase().includes(q.toLowerCase())).map((h: any) => ({ value: h.id, label: h.name, sublabel: h.code }));
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -192,8 +203,8 @@ export default function ComplaintsPage() {
       {/* Create Modal */}
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="File a Complaint" size="lg">
         <div className="space-y-4">
-          <Input placeholder="Student User ID" value={form.studentId} onChange={(e) => setForm({ ...form, studentId: e.target.value })} />
-          <Input placeholder="Hostel ID" value={form.hostelId} onChange={(e) => setForm({ ...form, hostelId: e.target.value })} />
+          <SearchPicker label="Student" placeholder="Search students by name, USN, or email…" value={form.studentId} onChange={(v) => setForm({ ...form, studentId: v })} onSearch={searchStudents} required />
+          <SearchPicker label="Hostel" placeholder="Search hostels by name or code…" value={form.hostelId} onChange={(v) => setForm({ ...form, hostelId: v })} onSearch={searchHostels} required />
           <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
             {COMPLAINT_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
@@ -218,14 +229,14 @@ export default function ComplaintsPage() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-gray-500">Student</span><p className="font-medium">{showDetail.student?.firstName} {showDetail.student?.lastName}</p></div>
-              <div><span className="text-gray-500">Category</span><p className="font-medium">{COMPLAINT_CATEGORIES.find(c => c.value === showDetail.category)?.label}</p></div>
-              <div><span className="text-gray-500">Hostel</span><p className="font-medium">{showDetail.hostel?.name}</p></div>
-              <div><span className="text-gray-500">Filed</span><p className="font-medium">{fmtDate(showDetail.createdAt)}</p></div>
-              {showDetail.assignedTo && <div><span className="text-gray-500">Assigned To</span><p className="font-medium">{showDetail.assignedTo.firstName} {showDetail.assignedTo.lastName}</p></div>}
-              {showDetail.resolvedAt && <div><span className="text-gray-500">Resolved</span><p className="font-medium">{fmtDate(showDetail.resolvedAt)}</p></div>}
+              <div><span className="text-gray-600">Student</span><p className="font-medium">{showDetail.student?.firstName} {showDetail.student?.lastName}</p></div>
+              <div><span className="text-gray-600">Category</span><p className="font-medium">{COMPLAINT_CATEGORIES.find(c => c.value === showDetail.category)?.label}</p></div>
+              <div><span className="text-gray-600">Hostel</span><p className="font-medium">{showDetail.hostel?.name}</p></div>
+              <div><span className="text-gray-600">Filed</span><p className="font-medium">{fmtDate(showDetail.createdAt)}</p></div>
+              {showDetail.assignedTo && <div><span className="text-gray-600">Assigned To</span><p className="font-medium">{showDetail.assignedTo.firstName} {showDetail.assignedTo.lastName}</p></div>}
+              {showDetail.resolvedAt && <div><span className="text-gray-600">Resolved</span><p className="font-medium">{fmtDate(showDetail.resolvedAt)}</p></div>}
             </div>
-            <div><span className="text-sm text-gray-500">Description</span><p className="text-sm bg-gray-50 rounded-lg p-3 mt-1">{showDetail.description}</p></div>
+            <div><span className="text-sm text-gray-600">Description</span><p className="text-sm bg-gray-50 rounded-lg p-3 mt-1">{showDetail.description}</p></div>
             {showDetail.resolution && <div><span className="text-sm text-green-600">Resolution</span><p className="text-sm bg-green-50 rounded-lg p-3 mt-1">{showDetail.resolution}</p></div>}
             <div className="border-t pt-3">
               <h4 className="text-sm font-semibold mb-2">Comments ({showDetail.comments?.length || 0})</h4>

@@ -15,6 +15,7 @@ import { StatCard } from '@/components/ui/stat-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SearchPicker, type SearchPickerOption } from '@/components/ui/search-picker';
 import { formatStatus, statusColor } from '@/lib/utils';
 import { ASSIGNMENT_STATUSES } from '@/lib/constants';
 import {
@@ -65,6 +66,41 @@ export default function AllotmentsPage() {
   const { hasRole } = useAuth();
   const { addToast } = useToast();
   const canWrite = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN');
+
+  // Search helpers for pickers
+  const searchStudents = useCallback(async (term: string): Promise<SearchPickerOption[]> => {
+    try {
+      const res = await api.get<{ data: { id: string; firstName: string; lastName: string; usn: string | null; email: string }[] }>(
+        `/users?search=${encodeURIComponent(term)}&role=STUDENT&limit=10`,
+      );
+      return (res.data || []).map((u) => ({
+        value: u.id,
+        label: `${u.firstName} ${u.lastName}`,
+        sublabel: [u.usn, u.email].filter(Boolean).join(' · '),
+      }));
+    } catch { return []; }
+  }, []);
+
+  const searchBeds = useCallback(async (term: string): Promise<SearchPickerOption[]> => {
+    try {
+      const res = await api.get<{ data: { id: string; name: string; code: string; rooms: { id: string; roomNo: string; floor: number; beds: { id: string; bedNo: string; status: string }[] }[] }[] }>(
+        `/hostels?limit=50`,
+      );
+      const results: SearchPickerOption[] = [];
+      for (const hostel of res.data || []) {
+        for (const room of hostel.rooms || []) {
+          for (const bed of room.beds || []) {
+            if (bed.status !== 'VACANT') continue;
+            const label = `Bed ${bed.bedNo} — Room ${room.roomNo} — ${hostel.name}`;
+            if (label.toLowerCase().includes(term.toLowerCase())) {
+              results.push({ value: bed.id, label: `Bed ${bed.bedNo}`, sublabel: `Room ${room.roomNo}, Floor ${room.floor} — ${hostel.name} (${hostel.code})` });
+            }
+          }
+        }
+      }
+      return results.slice(0, 20);
+    } catch { return []; }
+  }, []);
 
   const [assignments, setAssignments] = useState<BedAssignment[]>([]);
   const [stats, setStats] = useState<AllotmentStats | null>(null);
@@ -325,12 +361,24 @@ export default function AllotmentsPage() {
       {/* Assign Modal */}
       <Modal isOpen={showAssignModal} onClose={() => setShowAssignModal(false)} title="Assign Bed to Student">
         <div className="space-y-4">
-          <Input label="Student Profile ID" value={assignForm.studentId}
-            onChange={(e) => setAssignForm({ ...assignForm, studentId: e.target.value })}
-            placeholder="Paste student profile UUID" required />
-          <Input label="Bed ID" value={assignForm.bedId}
-            onChange={(e) => setAssignForm({ ...assignForm, bedId: e.target.value })}
-            placeholder="Paste bed UUID" required />
+          <SearchPicker
+            label="Student"
+            placeholder="Search by name, USN, or email..."
+            value={assignForm.studentId}
+            onChange={(val) => setAssignForm({ ...assignForm, studentId: val })}
+            onSearch={searchStudents}
+            required
+            emptyMessage="No students found"
+          />
+          <SearchPicker
+            label="Bed"
+            placeholder="Search vacant beds by number, room, hostel..."
+            value={assignForm.bedId}
+            onChange={(val) => setAssignForm({ ...assignForm, bedId: val })}
+            onSearch={searchBeds}
+            required
+            emptyMessage="No vacant beds found"
+          />
           <Input label="Reason" value={assignForm.reason}
             onChange={(e) => setAssignForm({ ...assignForm, reason: e.target.value })}
             placeholder="First-year allotment" />
@@ -352,12 +400,24 @@ export default function AllotmentsPage() {
       {/* Transfer Modal */}
       <Modal isOpen={showTransferModal} onClose={() => setShowTransferModal(false)} title="Transfer Student">
         <div className="space-y-4">
-          <Input label="Student Profile ID" value={transferForm.studentId}
-            onChange={(e) => setTransferForm({ ...transferForm, studentId: e.target.value })}
-            placeholder="Student profile UUID" required />
-          <Input label="New Bed ID" value={transferForm.newBedId}
-            onChange={(e) => setTransferForm({ ...transferForm, newBedId: e.target.value })}
-            placeholder="Destination bed UUID" required />
+          <SearchPicker
+            label="Student"
+            placeholder="Search by name, USN, or email..."
+            value={transferForm.studentId}
+            onChange={(val) => setTransferForm({ ...transferForm, studentId: val })}
+            onSearch={searchStudents}
+            required
+            emptyMessage="No students found"
+          />
+          <SearchPicker
+            label="New Bed"
+            placeholder="Search vacant beds by number, room, hostel..."
+            value={transferForm.newBedId}
+            onChange={(val) => setTransferForm({ ...transferForm, newBedId: val })}
+            onSearch={searchBeds}
+            required
+            emptyMessage="No vacant beds found"
+          />
           <Input label="Reason" value={transferForm.reason}
             onChange={(e) => setTransferForm({ ...transferForm, reason: e.target.value })}
             placeholder="Room change request" />
@@ -373,9 +433,15 @@ export default function AllotmentsPage() {
       {/* Vacate Modal */}
       <Modal isOpen={showVacateModal} onClose={() => setShowVacateModal(false)} title="Vacate Bed">
         <div className="space-y-4">
-          <Input label="Student Profile ID" value={vacateForm.studentId}
-            onChange={(e) => setVacateForm({ ...vacateForm, studentId: e.target.value })}
-            placeholder="Student profile UUID" required />
+          <SearchPicker
+            label="Student"
+            placeholder="Search by name, USN, or email..."
+            value={vacateForm.studentId}
+            onChange={(val) => setVacateForm({ ...vacateForm, studentId: val })}
+            onSearch={searchStudents}
+            required
+            emptyMessage="No students found"
+          />
           <Input label="Reason" value={vacateForm.reason}
             onChange={(e) => setVacateForm({ ...vacateForm, reason: e.target.value })}
             placeholder="Graduation, transfer, etc." />

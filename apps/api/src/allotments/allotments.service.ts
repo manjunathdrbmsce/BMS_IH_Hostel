@@ -26,7 +26,7 @@ export class AllotmentsService {
    * - Student must not have an ACTIVE assignment
    */
   async assign(dto: AssignBedDto, assignedById?: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const assignmentId = await this.prisma.$transaction(async (tx) => {
       // Verify student exists
       const student = await tx.user.findUnique({ where: { id: dto.studentId } });
       if (!student) throw new NotFoundException(`Student ${dto.studentId} not found`);
@@ -73,8 +73,10 @@ export class AllotmentsService {
         `Bed ${bed.bedNo} in ${bed.room.hostel.code}/${bed.room.roomNo} assigned to student ${student.firstName} ${student.lastName}`,
       );
 
-      return this.findById(assignment.id);
+      return assignment.id;
     });
+
+    return this.findById(assignmentId);
   }
 
   /**
@@ -83,7 +85,7 @@ export class AllotmentsService {
    * - New bed must be VACANT
    */
   async transfer(dto: TransferBedDto, assignedById?: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const assignmentId = await this.prisma.$transaction(async (tx) => {
       // Find current active assignment
       const current = await tx.bedAssignment.findFirst({
         where: { studentId: dto.studentId, status: AssignmentStatus.ACTIVE },
@@ -137,8 +139,10 @@ export class AllotmentsService {
         `Student ${dto.studentId} transferred from bed ${current.bed.bedNo} to ${newBed.bedNo}`,
       );
 
-      return this.findById(assignment.id);
+      return assignment.id;
     });
+
+    return this.findById(assignmentId);
   }
 
   /**

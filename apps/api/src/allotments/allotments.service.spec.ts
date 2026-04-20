@@ -89,6 +89,55 @@ describe('AllotmentsService', () => {
       );
     });
 
+    // Fix #4: Verify findById is called AFTER transaction, not inside it
+    it('should call findById AFTER transaction commits (Fix #4)', async () => {
+      const callOrder: string[] = [];
+
+      mockPrismaService.$transaction.mockImplementation(async (cb: any) => {
+        callOrder.push('tx-start');
+        const result = await cb(txMock);
+        callOrder.push('tx-end');
+        return result;
+      });
+
+      txMock.user.findUnique.mockResolvedValue({ id: 'u-1', firstName: 'Test', lastName: 'User' });
+      txMock.bed.findUnique.mockResolvedValue({
+        id: 'bed-1', bedNo: 'A101-B1', status: BedStatus.VACANT,
+        room: { roomNo: 'A101', hostel: { code: 'KH' } },
+      });
+      txMock.bedAssignment.findFirst.mockResolvedValue(null);
+      txMock.bedAssignment.create.mockResolvedValue({ id: 'a-1' });
+      txMock.bed.update.mockResolvedValue({});
+      mockPrismaService.bedAssignment.findUnique.mockImplementation(async () => {
+        callOrder.push('findById');
+        return mockAssignment;
+      });
+
+      await service.assign({ studentId: 'u-1', bedId: 'bed-1' } as any, 'admin-1');
+
+      // Critical: findById must happen AFTER tx-end, not between tx-start and tx-end
+      expect(callOrder).toEqual(['tx-start', 'tx-end', 'findById']);
+    });
+
+    // Fix #4: Verify the assignment ID from the transaction is passed to findById
+    it('should pass correct assignment ID from transaction to findById (Fix #4)', async () => {
+      txMock.user.findUnique.mockResolvedValue({ id: 'u-1', firstName: 'Test', lastName: 'User' });
+      txMock.bed.findUnique.mockResolvedValue({
+        id: 'bed-1', bedNo: 'A101-B1', status: BedStatus.VACANT,
+        room: { roomNo: 'A101', hostel: { code: 'KH' } },
+      });
+      txMock.bedAssignment.findFirst.mockResolvedValue(null);
+      txMock.bedAssignment.create.mockResolvedValue({ id: 'unique-assign-id' });
+      txMock.bed.update.mockResolvedValue({});
+      mockPrismaService.bedAssignment.findUnique.mockResolvedValue(mockAssignment);
+
+      await service.assign({ studentId: 'u-1', bedId: 'bed-1' } as any);
+
+      expect(mockPrismaService.bedAssignment.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'unique-assign-id' } }),
+      );
+    });
+
     it('should throw ConflictException when bed is occupied', async () => {
       txMock.user.findUnique.mockResolvedValue({ id: 'u-1' });
       txMock.bed.findUnique.mockResolvedValue({
@@ -165,6 +214,38 @@ describe('AllotmentsService', () => {
       );
 
       expect(result.id).toBe('a-2');
+    });
+
+    // Fix #4: Verify findById is called AFTER transaction commits for transfer
+    it('should call findById AFTER transaction commits in transfer (Fix #4)', async () => {
+      const callOrder: string[] = [];
+
+      mockPrismaService.$transaction.mockImplementation(async (cb: any) => {
+        callOrder.push('tx-start');
+        const result = await cb(txMock);
+        callOrder.push('tx-end');
+        return result;
+      });
+
+      txMock.bedAssignment.findFirst.mockResolvedValue({
+        id: 'a-1', studentId: 'u-1', bedId: 'old-bed', status: AssignmentStatus.ACTIVE,
+        bed: { bedNo: 'A101-B1' },
+      });
+      txMock.bed.findUnique.mockResolvedValue({
+        id: 'new-bed', bedNo: 'A102-B1', status: BedStatus.VACANT,
+        room: { roomNo: 'A102', hostel: { code: 'KH' } },
+      });
+      txMock.bedAssignment.update.mockResolvedValue({});
+      txMock.bedAssignment.create.mockResolvedValue({ id: 'a-2' });
+      txMock.bed.update.mockResolvedValue({});
+      mockPrismaService.bedAssignment.findUnique.mockImplementation(async () => {
+        callOrder.push('findById');
+        return { ...mockAssignment, id: 'a-2' };
+      });
+
+      await service.transfer({ studentId: 'u-1', newBedId: 'new-bed' } as any, 'admin-1');
+
+      expect(callOrder).toEqual(['tx-start', 'tx-end', 'findById']);
     });
 
     it('should throw NotFoundException when student has no active assignment', async () => {
