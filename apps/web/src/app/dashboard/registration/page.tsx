@@ -20,7 +20,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { useToast } from '@/components/ui/toast';
 import {
   ClipboardList, Plus, Search, FileText, CheckCircle2, Clock, XCircle,
-  AlertTriangle, ChevronRight, ChevronLeft, Send, Eye,
+  AlertTriangle, ChevronRight, ChevronLeft, Send, Eye, Pencil,
   UserCheck, Users2, MapPin, FileCheck, ShieldCheck,
   Camera, Upload, X, Loader2, DoorOpen, Wallet, Building2,
 } from 'lucide-react';
@@ -138,8 +138,10 @@ export default function RegistrationPage() {
   const [showWizard, setShowWizard] = useState(false);
   const [step, setStep] = useState(0);
   const [registrationId, setRegistrationId] = useState<string | null>(null);
+  const [academicYear, setAcademicYear] = useState<string>('');
   const [wizard, setWizard] = useState<WizardData>(defaultWizard);
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [hostels, setHostels] = useState<any[]>([]);
 
   // Detail
@@ -204,11 +206,13 @@ export default function RegistrationPage() {
   const startNew = async () => {
     try {
       const year = new Date().getFullYear();
-      const academicYear = `${year}-${year + 1}`;
-      const res = await api.post<any>('/registration', { academicYear });
+      const newAcademicYear = `${year}-${year + 1}`;
+      const res = await api.post<any>('/registration', { academicYear: newAcademicYear });
       setRegistrationId(res.data.id);
+      setAcademicYear(res.data.academicYear || newAcademicYear);
       setWizard(defaultWizard);
       setStep(0);
+      setDirty(false);
       setShowWizard(true);
     } catch (e: any) {
       addToast({ type: 'error', title: e.message || 'Failed to start registration' });
@@ -218,6 +222,10 @@ export default function RegistrationPage() {
   // ── Resume Draft ──────────────────────────────────────────────────────
   const resumeDraft = async (reg: any) => {
     setRegistrationId(reg.id);
+    // Restore academicYear from the existing registration record so subsequent
+    // saves/submits keep it intact. Falls back to the current year window.
+    const fallbackYear = new Date().getFullYear();
+    setAcademicYear(reg.academicYear || `${fallbackYear}-${fallbackYear + 1}`);
     // Pre-fill wizard from student profile + registration data
     const profile = reg.student?.studentProfile || {};
     setWizard({
@@ -288,17 +296,26 @@ export default function RegistrationPage() {
       },
     });
     setStep(0);
+    setDirty(false);
     setShowWizard(true);
   };
 
   // ── Save Current Step ─────────────────────────────────────────────────
-  const saveDraft = async () => {
+  // Only persists when there's an active registration AND the user has
+  // actually edited something. This prevents firing a PATCH (which can
+  // fail validation) immediately on modal close when nothing has changed.
+  const saveDraft = async (opts?: { silent?: boolean }) => {
     if (!registrationId) return;
+    if (opts?.silent && !dirty) return;
     setSaving(true);
     try {
       await api.patch<any>(`/registration/${registrationId}/draft`, wizard);
+      setDirty(false);
     } catch (e: any) {
-      addToast({ type: 'error', title: e.message || 'Failed to save draft' });
+      // Surface errors only on explicit user actions, never on silent autosave.
+      if (!opts?.silent) {
+        addToast({ type: 'error', title: e.message || 'Failed to save draft' });
+      }
     }
     setSaving(false);
   };
@@ -421,6 +438,7 @@ export default function RegistrationPage() {
 
   // ── Input helpers ─────────────────────────────────────────────────────
   const setField = (section: keyof WizardData, field: string, value: string | boolean) => {
+    setDirty(true);
     setWizard((prev) => ({
       ...prev,
       [section]: { ...prev[section], [field]: value },
@@ -848,8 +866,16 @@ export default function RegistrationPage() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Badge variant={statusBadge[r.status] || 'default'}>{REGISTRATION_STATUSES.find(s => s.value === r.status)?.label || r.status}</Badge>
-                  {r.status === 'DRAFT' && isStudent && (
-                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); resumeDraft(r); }}>Continue</Button>
+                  {r.status === 'DRAFT' && (isStudent || canManage) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); resumeDraft(r); }}
+                      title="Resume editing this draft"
+                    >
+                      <Pencil className="h-3.5 w-3.5 mr-1" />
+                      Edit Draft
+                    </Button>
                   )}
                 </div>
               </div>
@@ -867,7 +893,7 @@ export default function RegistrationPage() {
       {/* ── Wizard Modal ────────────────────────────────────────────────── */}
       <Modal
         open={showWizard}
-        onClose={() => { saveDraft(); setShowWizard(false); }}
+        onClose={() => { saveDraft({ silent: true }); setShowWizard(false); }}
         title="Hostel Admission Form"
       >
         <div className="space-y-6">
@@ -878,7 +904,7 @@ export default function RegistrationPage() {
               return (
                 <button
                   key={i}
-                  onClick={() => { saveDraft(); setStep(i); }}
+                  onClick={() => { saveDraft({ silent: true }); setStep(i); }}
                   className={`flex flex-col items-center gap-1 px-2 py-1 rounded transition-colors ${
                     i === step ? 'text-blue-700 bg-blue-50' : i < step ? 'text-green-600' : 'text-gray-400'
                   }`}
@@ -964,6 +990,25 @@ export default function RegistrationPage() {
                 {REGISTRATION_STATUSES.find(s => s.value === showDetail.status)?.label}
               </Badge>
             </div>
+
+            {/* ── Edit Draft action (visible while still in DRAFT) ───────── */}
+            {showDetail.status === 'DRAFT' && (isStudent || canManage) && (
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const reg = showDetail;
+                    setShowDetail(null);
+                    resumeDraft(reg);
+                  }}
+                  title="Resume editing this draft"
+                >
+                  <Pencil className="h-3.5 w-3.5 mr-1" />
+                  Edit Draft
+                </Button>
+              </div>
+            )}
 
             {/* ── Section 1: Personal Details ─────────────────── */}
             <div className="space-y-3">

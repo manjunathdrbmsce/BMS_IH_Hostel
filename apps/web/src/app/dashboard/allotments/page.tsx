@@ -83,23 +83,48 @@ export default function AllotmentsPage() {
 
   const searchBeds = useCallback(async (term: string): Promise<SearchPickerOption[]> => {
     try {
-      const res = await api.get<{ data: { id: string; name: string; code: string; rooms: { id: string; roomNo: string; floor: number; beds: { id: string; bedNo: string; status: string }[] }[] }[] }>(
+      // First load active hostels (lightweight summary endpoint).
+      const hostelsRes = await api.get<{ data: { id: string; name: string; code: string }[] }>(
         `/hostels?limit=50`,
       );
+      const hostels = hostelsRes.data || [];
+
+      // For each hostel, query the rooms endpoint which returns rooms with their beds (with id + bedNo + status).
+      type RoomWithBeds = {
+        id: string;
+        roomNo: string;
+        floor: number;
+        beds: { id: string; bedNo: string; status: string }[];
+      };
+      const roomBatches = await Promise.all(
+        hostels.map((h) =>
+          api
+            .get<{ data: RoomWithBeds[] }>(`/rooms?hostelId=${encodeURIComponent(h.id)}&limit=200`)
+            .then((r) => ({ hostel: h, rooms: r.data || [] }))
+            .catch(() => ({ hostel: h, rooms: [] as RoomWithBeds[] })),
+        ),
+      );
+
+      const lcTerm = term.toLowerCase();
       const results: SearchPickerOption[] = [];
-      for (const hostel of res.data || []) {
-        for (const room of hostel.rooms || []) {
+      for (const { hostel, rooms } of roomBatches) {
+        for (const room of rooms) {
           for (const bed of room.beds || []) {
             if (bed.status !== 'VACANT') continue;
-            const label = `Bed ${bed.bedNo} — Room ${room.roomNo} — ${hostel.name}`;
-            if (label.toLowerCase().includes(term.toLowerCase())) {
-              results.push({ value: bed.id, label: `Bed ${bed.bedNo}`, sublabel: `Room ${room.roomNo}, Floor ${room.floor} — ${hostel.name} (${hostel.code})` });
+            // Map readable bed name -> bed.id (the backend identifier used by /allotments/assign).
+            const label = `Bed ${bed.bedNo}`;
+            const sublabel = `Room ${room.roomNo}, Floor ${room.floor} — ${hostel.name} (${hostel.code})`;
+            const haystack = `${label} ${sublabel}`.toLowerCase();
+            if (!term || haystack.includes(lcTerm)) {
+              results.push({ value: bed.id, label, sublabel });
             }
           }
         }
       }
       return results.slice(0, 20);
-    } catch { return []; }
+    } catch {
+      return [];
+    }
   }, []);
 
   const [assignments, setAssignments] = useState<BedAssignment[]>([]);
@@ -172,13 +197,23 @@ export default function AllotmentsPage() {
     }
     setAssigning(true);
     try {
-      await api.post('/allotments/assign', {
+      const res = await api.post<{ success: boolean; data: BedAssignment }>('/allotments/assign', {
         studentId: assignForm.studentId,
         bedId: assignForm.bedId,
         reason: assignForm.reason || undefined,
         notes: assignForm.notes || undefined,
       });
-      addToast({ type: 'success', title: 'Bed assigned successfully' });
+      const a = res?.data;
+      const studentName = a?.student
+        ? `${a.student.firstName} ${a.student.lastName}`.trim()
+        : 'Student';
+      const bedLabel = a?.bed
+        ? `Bed ${a.bed.bedNo} (Room ${a.bed.room.roomNo}, ${a.bed.room.hostel.name})`
+        : 'the selected bed';
+      addToast({
+        type: 'success',
+        title: `${studentName} assigned to ${bedLabel}`,
+      });
       setShowAssignModal(false);
       setAssignForm({ studentId: '', bedId: '', reason: '', notes: '' });
       refreshAll();

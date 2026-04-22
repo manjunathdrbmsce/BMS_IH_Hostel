@@ -205,14 +205,26 @@ export default function ComplaintsPage() {
         <div className="space-y-4">
           <SearchPicker label="Student" placeholder="Search students by name, USN, or email…" value={form.studentId} onChange={(v) => setForm({ ...form, studentId: v })} onSearch={searchStudents} required />
           <SearchPicker label="Hostel" placeholder="Search hostels by name or code…" value={form.hostelId} onChange={(v) => setForm({ ...form, hostelId: v })} onSearch={searchHostels} required />
-          <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
-            {COMPLAINT_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-          </select>
-          <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
-            {COMPLAINT_PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-          </select>
-          <Input placeholder="Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
-          <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm" rows={4} />
+          <div>
+            <label htmlFor="complaint-category" className="block text-sm font-semibold text-gray-900 mb-1.5">Category <span className="text-red-500">*</span></label>
+            <select id="complaint-category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+              {COMPLAINT_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="complaint-priority" className="block text-sm font-semibold text-gray-900 mb-1.5">Priority <span className="text-red-500">*</span></label>
+            <select id="complaint-priority" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500">
+              {COMPLAINT_PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="complaint-subject" className="block text-sm font-semibold text-gray-900 mb-1.5">Subject <span className="text-red-500">*</span></label>
+            <Input id="complaint-subject" placeholder="Brief subject of the complaint" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
+          </div>
+          <div>
+            <label htmlFor="complaint-description" className="block text-sm font-semibold text-gray-900 mb-1.5">Description <span className="text-red-500">*</span></label>
+            <textarea id="complaint-description" placeholder="Describe the issue in detail…" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-900 placeholder:font-normal placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500" rows={4} />
+          </div>
           <Button onClick={handleCreate} className="w-full">Submit Complaint</Button>
         </div>
       </Modal>
