@@ -80,13 +80,13 @@ export default function LeaveDetail() {
     { label: 'Applied', date: leave.createdAt, done: true },
     {
       label: 'Parent Approval',
-      date: leave.parentApprovedAt,
+      date: leave.parentApprovalAt,
       done: ['PARENT_APPROVED', 'WARDEN_APPROVED'].includes(leave.status),
       rejected: leave.status === 'PARENT_REJECTED',
     },
     {
       label: 'Warden Approval',
-      date: leave.wardenApprovedAt,
+      date: leave.wardenApprovalAt,
       done: leave.status === 'WARDEN_APPROVED',
       rejected: leave.status === 'REJECTED',
     },

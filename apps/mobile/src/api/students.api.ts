@@ -3,12 +3,39 @@ import apiClient, { type ApiResponse, type PaginationMeta } from './client';
 // ── Types ──
 
 export interface DashboardStats {
-  totalStudents: number;
-  totalHostels: number;
-  occupancyRate: number;
-  pendingLeaves: number;
-  openComplaints: number;
-  [key: string]: number;
+  totalStudents?: number;
+  totalHostels?: number;
+  occupancyRate?: number;
+  attendancePercentage?: number;
+  pendingLeaves?: number;
+  openComplaints?: number;
+  users: {
+    total: number;
+    active: number;
+    students: number;
+    staff: number;
+    pending: number;
+    suspended: number;
+  };
+  hostels: {
+    total: number;
+    active: number;
+    totalRooms: number;
+    totalBeds: number;
+    occupiedBeds: number;
+    vacantBeds: number;
+    occupancyRate: number;
+  };
+  leave: {
+    pending: number;
+    approved: number;
+    rejected: number;
+  };
+  complaints: {
+    open: number;
+    inProgress: number;
+    resolved: number;
+  };
 }
 
 export interface StudentListParams {

@@ -48,10 +48,10 @@ export default function WardenDashboard() {
 
   const statCards = stats
     ? [
-        { title: 'Total Students', value: String(stats.totalStudents || 0), icon: 'people', color: '#6366F1' },
-        { title: 'Present Today', value: String(stats.presentToday || 0), icon: 'checkmark-circle', color: '#10B981' },
-        { title: 'Pending Leaves', value: String(stats.pendingLeaves || 0), icon: 'time-outline', color: '#F59E0B' },
-        { title: 'Open Complaints', value: String(stats.openComplaints || 0), icon: 'chatbubble-outline', color: '#EF4444' },
+        { title: 'Total Students', value: String(stats.users?.students || 0), icon: 'people', color: '#6366F1' },
+        { title: 'Occupied Beds', value: String(stats.hostels?.occupiedBeds || 0), icon: 'checkmark-circle', color: '#10B981' },
+        { title: 'Pending Leaves', value: String(stats.leave?.pending || 0), icon: 'time-outline', color: '#F59E0B' },
+        { title: 'Open Complaints', value: String(stats.complaints?.open || 0), icon: 'chatbubble-outline', color: '#EF4444' },
       ]
     : [];
 

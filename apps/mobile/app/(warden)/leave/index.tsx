@@ -8,7 +8,7 @@ import { useTheme } from '@/theme';
 import { leaveApi, type LeaveRequest } from '@/api';
 import type { LeaveStatusName } from '@/constants';
 import { Card, LeaveStatusBadge, EmptyState, Skeleton } from '@/components';
-import { formatDateRange, formatRelative } from '@/utils';
+import { formatDateRange } from '@/utils';
 import { usePaginatedApi } from '@/hooks';
 
 export default function WardenLeaveIndex() {
@@ -43,7 +43,7 @@ export default function WardenLeaveIndex() {
               </View>
               <View style={styles.cardMeta}>
                 <Text style={[styles.cardTitle, { color: colors.text }]}>
-                  {item.student?.user?.firstName} {item.student?.user?.lastName}
+                  {item.student?.firstName} {item.student?.lastName}
                 </Text>
                 <Text style={[styles.cardSub, { color: colors.textTertiary }]}>
                   {item.type} · {formatDateRange(item.fromDate, item.toDate)}

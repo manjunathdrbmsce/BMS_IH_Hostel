@@ -108,10 +108,10 @@ export default function ParentLeaveDetail() {
             <Ionicons name="person-circle-outline" size={40} color={colors.primary} />
             <View style={{ marginLeft: 12 }}>
               <Text style={[styles.studentName, { color: colors.text }]}>
-                {leave.student?.user?.firstName} {leave.student?.user?.lastName}
+                {leave.student?.firstName} {leave.student?.lastName}
               </Text>
               <Text style={[styles.studentInfo, { color: colors.textSecondary }]}>
-                {leave.student?.user?.usn || 'N/A'}
+                {leave.student?.usn || 'N/A'}
               </Text>
             </View>
           </Card>

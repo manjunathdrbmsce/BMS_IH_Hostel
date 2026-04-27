@@ -13,10 +13,17 @@ export interface LeaveRequest {
   toDate: string;
   reason: string;
   proofUrl?: string | null;
-  parentApprovedAt?: string | null;
-  wardenApprovedAt?: string | null;
+  parentApprovalAt?: string | null;
+  wardenApprovalAt?: string | null;
+  rejectedAt?: string | null;
   rejectionReason?: string | null;
-  student?: { user: { firstName: string; lastName: string; usn: string | null } };
+  student?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email?: string;
+    usn: string | null;
+  };
   createdAt: string;
   updatedAt: string;
 }

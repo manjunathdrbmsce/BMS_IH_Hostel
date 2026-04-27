@@ -21,6 +21,21 @@ const queryClient = new QueryClient({
   },
 });
 
+function getDefaultRoute(group: string) {
+  switch (group) {
+    case '(warden)':
+      return '/(warden)/dashboard';
+    case '(security)':
+      return '/(security)/gate';
+    case '(parent)':
+      return '/(parent)/home';
+    case '(student)':
+      return '/(student)/home';
+    default:
+      return '/(auth)/login';
+  }
+}
+
 /** Redirect to correct route group based on auth state, preserving deep links. */
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isInitialized, isLoading } = useAuthStore();
@@ -76,7 +91,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
         pendingDeepLink.current = null;
         router.replace(`/${group}${target}` as any);
       } else {
-        router.replace(`/${group}/home` as any);
+        router.replace(getDefaultRoute(group) as any);
       }
     }
   }, [isAuthenticated, isInitialized, isLoading, segments]);
@@ -104,6 +119,7 @@ function RootLayoutContent() {
             animation: 'slide_from_right',
           }}
         >
+          <Stack.Screen name="index" />
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(student)" />
           <Stack.Screen name="(parent)" />

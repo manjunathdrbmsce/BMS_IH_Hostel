@@ -1,6 +1,21 @@
 import { Redirect } from 'expo-router';
 import { useAuthStore } from '@/store';
 
+function getDefaultRoute(group: string) {
+  switch (group) {
+    case '(warden)':
+      return '/(warden)/dashboard';
+    case '(security)':
+      return '/(security)/gate';
+    case '(parent)':
+      return '/(parent)/home';
+    case '(student)':
+      return '/(student)/home';
+    default:
+      return '/(auth)/login';
+  }
+}
+
 /**
  * Root index that redirects to the correct navigator group.
  */
@@ -15,5 +30,5 @@ export default function Index() {
   }
 
   const group = getNavigatorGroup();
-  return <Redirect href={`/${group}/home` as any} />;
+  return <Redirect href={getDefaultRoute(group) as any} />;
 }

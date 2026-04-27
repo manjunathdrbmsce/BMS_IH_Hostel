@@ -96,8 +96,8 @@ export default function WardenLeaveDetail() {
 
   const timeline = [
     { label: 'Applied', date: leave.createdAt, done: true },
-    { label: 'Parent Approved', date: leave.parentApprovedAt, done: !!leave.parentApprovedAt },
-    { label: 'Warden Decision', date: leave.wardenApprovedAt, done: leave.status === 'WARDEN_APPROVED', rejected: leave.status === 'REJECTED' },
+    { label: 'Parent Approved', date: leave.parentApprovalAt, done: !!leave.parentApprovalAt },
+    { label: 'Warden Decision', date: leave.wardenApprovalAt ?? leave.rejectedAt, done: leave.status === 'WARDEN_APPROVED', rejected: leave.status === 'REJECTED' },
   ];
 
   return (
@@ -114,14 +114,14 @@ export default function WardenLeaveDetail() {
             <Ionicons name="person-circle-outline" size={44} color={colors.primary} />
             <View style={{ marginLeft: 12, flex: 1 }}>
               <Text style={[styles.studentName, { color: colors.text }]}>
-                {leave.student?.user?.firstName} {leave.student?.user?.lastName}
+                {leave.student?.firstName} {leave.student?.lastName}
               </Text>
               <Text style={[styles.studentInfo, { color: colors.textSecondary }]}>
-                {leave.student?.user?.usn || 'N/A'}
+                {leave.student?.usn || 'N/A'}
               </Text>
-              {leave.student?.user?.usn && (
+              {leave.student?.usn && (
                 <Text style={[styles.studentInfo, { color: colors.textTertiary }]}>
-                  USN: {leave.student.user.usn}
+                  USN: {leave.student.usn}
                 </Text>
               )}
             </View>
