@@ -105,15 +105,20 @@ export default function WardenProfile() {
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Account</Text>
           <Card variant="elevated" style={{ padding: 4 }}>
             {[
-              { icon: 'notifications-outline' as const, label: 'Notifications', route: '/(warden)/notifications' },
-              { icon: 'help-circle-outline' as const, label: 'Help & Support', route: null },
-              { icon: 'document-text-outline' as const, label: 'Terms & Conditions', route: null },
+              { icon: 'notifications-outline' as const, label: 'Notifications', route: '/(warden)/notifications', returnTo: 'profile' },
+              { icon: 'help-circle-outline' as const, label: 'Help & Support', route: '/(warden)/help-support', returnTo: 'profile' },
+              { icon: 'document-text-outline' as const, label: 'Terms & Conditions', route: '/(warden)/terms', returnTo: 'profile' },
             ].map((item, i) => (
               <TouchableOpacity
                 key={i}
                 onPress={() => {
                   Haptics.selectionAsync();
-                  if (item.route) router.push(item.route as any);
+                  if (item.route) {
+                    router.push({
+                      pathname: item.route,
+                      params: item.returnTo ? { returnTo: item.returnTo } : undefined,
+                    } as any);
+                  }
                 }}
                 style={[
                   styles.menuItem,

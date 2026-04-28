@@ -3,7 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl } fr
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
 import { notificationsApi, type Notification } from '@/api';
@@ -25,7 +25,17 @@ export default function NotificationsScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const [markingAll, setMarkingAll] = useState(false);
+
+  const handleBack = () => {
+    if (returnTo === 'profile') {
+      router.replace('/(student)/profile');
+      return;
+    }
+
+    router.back();
+  };
 
   const { items, loading, refreshing, refresh, loadMore, hasMore } = usePaginatedApi<Notification>(
     notificationsApi.list,
@@ -109,7 +119,7 @@ export default function NotificationsScreen() {
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12 }}>
+          <TouchableOpacity onPress={handleBack} style={{ marginRight: 12 }}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Notifications</Text>

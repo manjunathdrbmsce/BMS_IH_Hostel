@@ -39,9 +39,36 @@ export default function ProfileScreen() {
 
   const menuItems = [
     { icon: 'shield-checkmark-outline', label: 'Violations', color: '#EF4444', onPress: () => router.push('/(student)/violations') },
-    { icon: 'notifications-outline', label: 'Notifications', color: '#6366F1', onPress: () => router.push('/(student)/notifications') },
-    { icon: 'help-circle-outline', label: 'Help & Support', color: '#3B82F6', onPress: () => {} },
-    { icon: 'document-text-outline', label: 'Terms of Service', color: '#6B7280', onPress: () => {} },
+    {
+      icon: 'notifications-outline',
+      label: 'Notifications',
+      color: '#6366F1',
+      onPress: () =>
+        router.push({
+          pathname: '/(student)/notifications',
+          params: { returnTo: 'profile' },
+        }),
+    },
+    {
+      icon: 'help-circle-outline',
+      label: 'Help & Support',
+      color: '#3B82F6',
+      onPress: () =>
+        router.push({
+          pathname: '/(student)/help-support',
+          params: { returnTo: 'profile' },
+        }),
+    },
+    {
+      icon: 'document-text-outline',
+      label: 'Terms & Conditions',
+      color: '#6B7280',
+      onPress: () =>
+        router.push({
+          pathname: '/(student)/terms',
+          params: { returnTo: 'profile' },
+        }),
+    },
   ];
 
   if (!user) return null;
