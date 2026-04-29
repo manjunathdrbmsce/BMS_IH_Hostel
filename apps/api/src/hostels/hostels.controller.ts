@@ -54,7 +54,7 @@ export class HostelsController {
   }
 
   @Get('stats')
-  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN')
+  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN')
   @ApiOperation({ summary: 'Get hostel statistics' })
   @ApiResponse({ status: 200, description: 'Hostel stats' })
   async getStats() {
