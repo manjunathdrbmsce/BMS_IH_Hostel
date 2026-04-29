@@ -501,9 +501,9 @@ function RollCallTab() {
                     <div className="flex items-center justify-center gap-3">
                         <label className="text-sm font-medium text-slate-700">Hostel:</label>
                         <select value={selectedHostel} onChange={(e) => setSelectedHostel(e.target.value)}
-                            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 outline-none min-w-[200px]">
+                            className="px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-indigo-200 outline-none min-w-[200px]">
                             {hostels.map((h) => (
-                                <option key={h.id} value={h.id}>{h.name} ({h.code})</option>
+                                <option key={h.id} value={h.id} className="text-slate-900">{h.name} ({h.code})</option>
                             ))}
                         </select>
                     </div>
@@ -511,8 +511,8 @@ function RollCallTab() {
                     <div className="flex items-center justify-center gap-3">
                         <label className="text-sm font-medium text-slate-700">Duration:</label>
                         <select value={duration} onChange={(e) => setDuration(Number(e.target.value))}
-                            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 outline-none">
-                            {[3, 5, 10, 15, 20, 30].map((m) => <option key={m} value={m}>{m} min</option>)}
+                            className="px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-indigo-200 outline-none">
+                            {[3, 5, 10, 15, 20, 30].map((m) => <option key={m} value={m} className="text-slate-900">{m} min</option>)}
                         </select>
                     </div>
 

@@ -24,6 +24,21 @@ import {
   ChevronRight, BedDouble, Users, Heart,
 } from 'lucide-react';
 
+const SEMESTERS_BY_YEAR: Record<string, string[]> = {
+  '1': ['1', '2'],
+  '2': ['3', '4'],
+  '3': ['5', '6'],
+  '4': ['7', '8'],
+};
+
+const YEAR_OPTIONS = [
+  { value: '', label: '-' },
+  { value: '1', label: '1st' },
+  { value: '2', label: '2nd' },
+  { value: '3', label: '3rd' },
+  { value: '4', label: '4th' },
+];
+
 interface StudentProfile {
   id: string;
   userId: string;
@@ -88,6 +103,12 @@ export default function StudentsPage() {
     admissionDate: '', emergencyContact: '', permanentAddress: '', medicalConditions: '',
   });
   const [creating, setCreating] = useState(false);
+  const semesterOptions = form.year
+    ? [
+        { value: '', label: '-' },
+        ...(SEMESTERS_BY_YEAR[form.year] || []).map((semester) => ({ value: semester, label: semester })),
+      ]
+    : [{ value: '', label: 'Select year first' }];
 
   const fetchStudents = useCallback(async (page = 1) => {
     setLoading(true);
@@ -121,6 +142,18 @@ export default function StudentsPage() {
       addToast({ type: 'error', title: 'User ID is required' });
       return;
     }
+
+    if (form.semester && !form.year) {
+      addToast({ type: 'error', title: 'Year is required when semester is selected' });
+      return;
+    }
+
+    if (form.year && form.semester && !SEMESTERS_BY_YEAR[form.year]?.includes(form.semester)) {
+      const allowed = SEMESTERS_BY_YEAR[form.year].join(' or ');
+      addToast({ type: 'error', title: `For year ${form.year}, semester must be ${allowed}` });
+      return;
+    }
+
     setCreating(true);
     try {
       await api.post('/students/profiles', {
@@ -285,22 +318,11 @@ export default function StudentsPage() {
               placeholder="B.E." />
             <div className="grid grid-cols-2 gap-2">
               <Select label="Year" value={form.year}
-                onChange={(e) => setForm({ ...form, year: e.target.value })}
-                options={[
-                  { value: '', label: '—' },
-                  { value: '1', label: '1st' },
-                  { value: '2', label: '2nd' },
-                  { value: '3', label: '3rd' },
-                  { value: '4', label: '4th' },
-                  { value: '5', label: '5th' },
-                  { value: '6', label: '6th' },
-                ]} />
+                onChange={(e) => setForm({ ...form, year: e.target.value, semester: '' })}
+                options={YEAR_OPTIONS} />
               <Select label="Sem" value={form.semester}
                 onChange={(e) => setForm({ ...form, semester: e.target.value })}
-                options={[
-                  { value: '', label: '—' },
-                  ...Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) })),
-                ]} />
+                options={semesterOptions} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">

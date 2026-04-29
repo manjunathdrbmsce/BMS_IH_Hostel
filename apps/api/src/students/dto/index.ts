@@ -52,19 +52,19 @@ export class CreateStudentProfileDto {
   @MaxLength(100)
   course?: string;
 
-  @ApiPropertyOptional({ example: 2 })
+  @ApiPropertyOptional({ example: 2, minimum: 1, maximum: 4 })
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(6)
+  @Max(4)
   @Type(() => Number)
   year?: number;
 
-  @ApiPropertyOptional({ example: 3 })
+  @ApiPropertyOptional({ example: 3, minimum: 1, maximum: 8 })
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(12)
+  @Max(8)
   @Type(() => Number)
   semester?: number;
 
@@ -118,11 +118,11 @@ export class ListStudentsQueryDto {
   @IsString()
   department?: string;
 
-  @ApiPropertyOptional({ example: 2 })
+  @ApiPropertyOptional({ example: 2, minimum: 1, maximum: 4 })
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(6)
+  @Max(4)
   @Type(() => Number)
   year?: number;
 }

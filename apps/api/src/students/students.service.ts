@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,6 +18,12 @@ import {
 @Injectable()
 export class StudentsService {
   private readonly logger = new Logger(StudentsService.name);
+  private readonly validSemestersByYear: Record<number, number[]> = {
+    1: [1, 2],
+    2: [3, 4],
+    3: [5, 6],
+    4: [7, 8],
+  };
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -25,6 +32,8 @@ export class StudentsService {
   // -----------------------------------------------------------------------
 
   async createProfile(dto: CreateStudentProfileDto) {
+    this.validateYearSemester(dto.year, dto.semester);
+
     // Verify user exists
     const user = await this.prisma.user.findUnique({ where: { id: dto.userId } });
     if (!user) {
@@ -201,6 +210,8 @@ export class StudentsService {
   }
 
   async updateProfile(userId: string, dto: UpdateStudentProfileDto) {
+    this.validateYearSemester(dto.year, dto.semester);
+
     const existing = await this.prisma.studentProfile.findUnique({
       where: { userId },
     });
@@ -224,6 +235,23 @@ export class StudentsService {
     await this.prisma.studentProfile.update({ where: { userId }, data });
 
     return this.findProfileByUserId(userId);
+  }
+
+  private validateYearSemester(year?: number, semester?: number) {
+    if (semester !== undefined && year === undefined) {
+      throw new BadRequestException('Year is required when semester is provided');
+    }
+
+    if (year === undefined || semester === undefined) {
+      return;
+    }
+
+    const validSemesters = this.validSemestersByYear[year];
+    if (!validSemesters?.includes(semester)) {
+      throw new BadRequestException(
+        `Invalid academic year/semester combination. Year ${year} allows only semesters ${validSemesters?.join(' and ') || 'none'}.`,
+      );
+    }
   }
 
   // -----------------------------------------------------------------------
