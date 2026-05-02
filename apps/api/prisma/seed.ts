@@ -3,7 +3,7 @@
 // Generates realistic data across all roles for manual testing
 // =============================================================================
 
-import { PrismaClient, UserStatus, BuildingStatus, BedStatus, AssignmentStatus, HostelStatus, RoomStatus, RoomType, LeaveType, LeaveStatus, ComplaintCategory, ComplaintPriority, ComplaintStatus, NoticePriority, NoticeScope, GateEntryType, GatePassStatus, ViolationType, EscalationState, NotificationState, NotificationChannel, RegistrationStatus, AdmissionMode, FeeType } from '@prisma/client';
+import { PrismaClient, UserStatus, BuildingStatus, BedStatus, AssignmentStatus, HostelStatus, RoomStatus, RoomType, LeaveType, LeaveStatus, ComplaintCategory, ComplaintPriority, ComplaintStatus, NoticePriority, NoticeScope, GateEntryType, GatePassStatus, GatePassApprovalStatus, ViolationType, EscalationState, NotificationState, NotificationChannel, RegistrationStatus, AdmissionMode, FeeType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -1786,6 +1786,7 @@ async function main() {
           validFrom,
           validTo,
           status,
+          approvalStatus: GatePassApprovalStatus.APPROVED,
           approvedById: pick(publisherIds) || adminId,
         },
       });

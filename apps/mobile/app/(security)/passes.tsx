@@ -7,32 +7,34 @@ import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/theme';
 import { gateApi, type GatePass } from '@/api';
 import type { GatePassStatusName } from '@/constants';
-import { Card, GatePassStatusBadge, EmptyState, Skeleton, Badge } from '@/components';
+import { Card, GatePassStatusBadge, EmptyState, Skeleton } from '@/components';
 import { formatDate, formatTime } from '@/utils';
 import { usePaginatedApi, useApi } from '@/hooks';
 
 export default function SecurityPasses() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const [filter, setFilter] = useState<string>('APPROVED');
+  const [filter, setFilter] = useState<string>('ACTIVE');
 
   const { items, loading, refreshing, refresh, loadMore, hasMore } = usePaginatedApi<GatePass>(
     gateApi.listPasses,
-    { status: filter as GatePassStatusName },
+    filter
+      ? { status: filter as GatePassStatusName, approvalStatus: 'APPROVED' }
+      : { approvalStatus: 'APPROVED' },
   );
 
   const updatePass = useApi(gateApi.updatePass);
 
-  const handleVerify = async (pass: GatePass, action: 'USED' | 'REJECTED') => {
-    const actionLabel = action === 'USED' ? 'mark as used' : 'reject';
+  const handleVerify = async (pass: GatePass, action: 'USED' | 'CANCELLED') => {
+    const actionLabel = action === 'USED' ? 'mark as used' : 'cancel';
     Alert.alert(
       'Confirm',
       `Are you sure you want to ${actionLabel} this gate pass?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: action === 'USED' ? 'Verify' : 'Reject',
-          style: action === 'REJECTED' ? 'destructive' : 'default',
+          text: action === 'USED' ? 'Verify' : 'Cancel Pass',
+          style: action === 'CANCELLED' ? 'destructive' : 'default',
           onPress: async () => {
             try {
               await updatePass.execute(pass.id, { status: action });
@@ -48,8 +50,9 @@ export default function SecurityPasses() {
   };
 
   const filters = [
-    { label: 'Approved', value: 'APPROVED' },
+    { label: 'Active', value: 'ACTIVE' },
     { label: 'Used', value: 'USED' },
+    { label: 'Cancelled', value: 'CANCELLED' },
     { label: 'All', value: '' },
   ];
 
@@ -60,10 +63,10 @@ export default function SecurityPasses() {
           <View style={styles.cardHeader}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.name, { color: colors.text }]}>
-                {item.student?.user?.firstName} {item.student?.user?.lastName}
+                {item.student?.firstName} {item.student?.lastName}
               </Text>
               <Text style={[styles.rollNo, { color: colors.textSecondary }]}>
-                {item.student?.user?.usn}
+                {item.student?.usn}
               </Text>
             </View>
             <GatePassStatusBadge status={item.status} />
@@ -107,11 +110,11 @@ export default function SecurityPasses() {
                 <Text style={styles.actionText}>Verify & Use</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => handleVerify(item, 'REJECTED')}
+                onPress={() => handleVerify(item, 'CANCELLED')}
                 style={[styles.actionBtn, { backgroundColor: '#EF4444' }]}
               >
                 <Ionicons name="close-circle" size={16} color="#FFF" />
-                <Text style={styles.actionText}>Reject</Text>
+                <Text style={styles.actionText}>Cancel</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -132,6 +135,7 @@ export default function SecurityPasses() {
         showsHorizontalScrollIndicator={false}
         data={filters}
         keyExtractor={(f) => f.value}
+        style={styles.filterList}
         contentContainerStyle={{ gap: 8, paddingHorizontal: 20, paddingBottom: 12 }}
         renderItem={({ item: f }) => (
           <TouchableOpacity
@@ -180,6 +184,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingHorizontal: 20, paddingBottom: 12 },
   headerTitle: { fontSize: 28, fontWeight: '800' },
+  filterList: { flexGrow: 0, maxHeight: 48 },
   chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
   card: { padding: 16 },
   cardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },

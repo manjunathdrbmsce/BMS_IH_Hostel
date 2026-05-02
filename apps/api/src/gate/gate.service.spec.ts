@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ViolationsService } from '../violations/violations.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AttendanceService } from '../attendance/attendance.service';
-import { GateEntryType, GatePassStatus } from '@prisma/client';
+import { GateEntryType, GatePassStatus, GatePassApprovalStatus } from '@prisma/client';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -74,6 +74,7 @@ const mockPass = {
   validFrom: new Date(),
   validTo: new Date(),
   status: GatePassStatus.ACTIVE,
+  approvalStatus: GatePassApprovalStatus.APPROVED,
   approvedById: 'u-admin',
   student: { firstName: 'Arjun', lastName: 'Kumar' },
   approvedBy: { firstName: 'Admin', lastName: 'User' },

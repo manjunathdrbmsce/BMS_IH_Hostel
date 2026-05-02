@@ -6,8 +6,8 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
 import { gateApi, type GatePass } from '@/api';
-import type { GatePassStatusName } from '@/constants';
-import { Card, GatePassStatusBadge, Button, EmptyState, Skeleton } from '@/components';
+import type { GatePassApprovalStatusName, GatePassStatusName } from '@/constants';
+import { Card, GatePassApprovalStatusBadge, GatePassStatusBadge, Button, EmptyState, Skeleton } from '@/components';
 import { formatDate, formatTime } from '@/utils';
 import { usePaginatedApi } from '@/hooks';
 
@@ -17,17 +17,25 @@ export default function GatePassIndex() {
   const router = useRouter();
   const [filter, setFilter] = useState<string | null>(null);
 
+  const filters = [
+    { label: 'All', value: null, field: null },
+    { label: 'Pending', value: 'PENDING', field: 'approvalStatus' },
+    { label: 'Approved', value: 'APPROVED', field: 'approvalStatus' },
+    { label: 'Rejected', value: 'REJECTED', field: 'approvalStatus' },
+    { label: 'Used', value: 'USED', field: 'status' },
+  ];
+  const activeFilter = filters.find((item) => item.value === filter);
+  const listParams =
+    activeFilter?.field === 'approvalStatus'
+      ? { approvalStatus: filter as GatePassApprovalStatusName }
+      : activeFilter?.field === 'status'
+        ? { status: filter as GatePassStatusName }
+        : {};
+
   const { items, loading, refreshing, refresh, loadMore, hasMore } = usePaginatedApi<GatePass>(
     gateApi.listPasses,
-    filter ? { status: filter as GatePassStatusName } : {},
+    listParams,
   );
-
-  const filters = [
-    { label: 'All', value: null },
-    { label: 'Pending', value: 'PENDING' },
-    { label: 'Approved', value: 'APPROVED' },
-    { label: 'Used', value: 'USED' },
-  ];
 
   const renderItem = useCallback(
     ({ item, index: idx }: { item: GatePass; index: number }) => (
@@ -43,7 +51,11 @@ export default function GatePassIndex() {
                 {formatDate(item.expectedOut)}
               </Text>
             </View>
-            <GatePassStatusBadge status={item.status} />
+            {item.status === 'USED' ? (
+              <GatePassStatusBadge status={item.status} />
+            ) : (
+              <GatePassApprovalStatusBadge status={item.approvalStatus} />
+            )}
           </View>
           <View style={styles.timeRow}>
             <View style={styles.timeBlock}>
@@ -92,6 +104,7 @@ export default function GatePassIndex() {
           showsHorizontalScrollIndicator={false}
           data={filters}
           keyExtractor={(f) => String(f.value)}
+          style={styles.filterList}
           contentContainerStyle={{ gap: 8, paddingTop: 12 }}
           renderItem={({ item: f }) => (
             <TouchableOpacity
@@ -155,6 +168,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingBottom: 12 },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   headerTitle: { fontSize: 22, fontWeight: '800' },
+  filterList: { flexGrow: 0, maxHeight: 48 },
   chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1 },
   card: { padding: 16 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },

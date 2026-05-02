@@ -101,6 +101,14 @@ export const GatePassStatus = {
 } as const;
 export type GatePassStatusName = (typeof GatePassStatus)[keyof typeof GatePassStatus];
 
+export const GatePassApprovalStatus = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+} as const;
+export type GatePassApprovalStatusName =
+  (typeof GatePassApprovalStatus)[keyof typeof GatePassApprovalStatus];
+
 export const ViolationType = {
   LATE_ENTRY: 'LATE_ENTRY',
   OVERSTAY: 'OVERSTAY',

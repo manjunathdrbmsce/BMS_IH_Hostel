@@ -3,6 +3,7 @@ import { Badge } from './Badge';
 import {
   type LeaveStatusName,
   type ComplaintStatusName,
+  type GatePassApprovalStatusName,
   type GatePassStatusName,
   type AttendanceStatusName,
 } from '@/constants';
@@ -36,6 +37,12 @@ const GATE_PASS_STATUS_MAP: Record<GatePassStatusName, { label: string; variant:
   CANCELLED: { label: 'Cancelled', variant: 'default' },
 };
 
+const GATE_PASS_APPROVAL_STATUS_MAP: Record<GatePassApprovalStatusName, { label: string; variant: StatusVariant }> = {
+  PENDING: { label: 'Pending', variant: 'warning' },
+  APPROVED: { label: 'Approved', variant: 'success' },
+  REJECTED: { label: 'Rejected', variant: 'error' },
+};
+
 const ATTENDANCE_STATUS_MAP: Record<AttendanceStatusName, { label: string; variant: StatusVariant }> = {
   PRESENT: { label: 'Present', variant: 'success' },
   ABSENT: { label: 'Absent', variant: 'error' },
@@ -58,6 +65,11 @@ export function ComplaintStatusBadge({ status }: { status: ComplaintStatusName }
 
 export function GatePassStatusBadge({ status }: { status: GatePassStatusName }) {
   const config = GATE_PASS_STATUS_MAP[status] ?? { label: status, variant: 'default' as StatusVariant };
+  return <Badge label={config.label} variant={config.variant} dot />;
+}
+
+export function GatePassApprovalStatusBadge({ status }: { status: GatePassApprovalStatusName }) {
+  const config = GATE_PASS_APPROVAL_STATUS_MAP[status] ?? { label: status, variant: 'default' as StatusVariant };
   return <Badge label={config.label} variant={config.variant} dot />;
 }
 

@@ -85,7 +85,8 @@ export class GateController {
     if (!dto.studentId) {
       throw new ForbiddenException('studentId is required');
     }
-    const pass = await this.gateService.createPass(dto, user.id);
+    const approvedById = user.roles?.includes('STUDENT') ? null : user.id;
+    const pass = await this.gateService.createPass(dto, approvedById);
     return { success: true, data: pass };
   }
 
@@ -123,8 +124,9 @@ export class GateController {
   async updatePass(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateGatePassDto,
+    @CurrentUser() user: any,
   ) {
-    const pass = await this.gateService.updatePass(id, dto);
+    const pass = await this.gateService.updatePass(id, dto, user.id);
     return { success: true, data: pass };
   }
 

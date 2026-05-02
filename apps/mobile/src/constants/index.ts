@@ -16,6 +16,8 @@ export {
   type NoticePriorityName,
   GatePassStatus,
   type GatePassStatusName,
+  GatePassApprovalStatus,
+  type GatePassApprovalStatusName,
   ViolationType,
   type ViolationTypeName,
   EscalationState,

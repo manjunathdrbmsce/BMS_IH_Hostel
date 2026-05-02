@@ -83,6 +83,11 @@ export class UpdateGatePassDto {
   @IsOptional()
   @IsEnum(['ACTIVE', 'USED', 'EXPIRED', 'CANCELLED'])
   status?: string;
+
+  @ApiPropertyOptional({ enum: ['PENDING', 'APPROVED', 'REJECTED'] })
+  @IsOptional()
+  @IsEnum(['PENDING', 'APPROVED', 'REJECTED'])
+  approvalStatus?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +166,11 @@ export class ListGatePassesQueryDto {
   @IsOptional()
   @IsEnum(['ACTIVE', 'USED', 'EXPIRED', 'CANCELLED'])
   status?: string;
+
+  @ApiPropertyOptional({ enum: ['PENDING', 'APPROVED', 'REJECTED'] })
+  @IsOptional()
+  @IsEnum(['PENDING', 'APPROVED', 'REJECTED'])
+  approvalStatus?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

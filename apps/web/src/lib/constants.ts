@@ -371,6 +371,12 @@ export const GATE_PASS_STATUSES = [
   { value: 'CANCELLED', label: 'Cancelled' },
 ] as const;
 
+export const GATE_PASS_APPROVAL_STATUSES = [
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'APPROVED', label: 'Approved' },
+  { value: 'REJECTED', label: 'Rejected' },
+] as const;
+
 export const VIOLATION_TYPES = [
   { value: 'LATE_ENTRY', label: 'Late Entry' },
   { value: 'OVERSTAY', label: 'Overstay' },

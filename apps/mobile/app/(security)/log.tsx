@@ -38,12 +38,12 @@ export default function SecurityLog() {
             <View style={styles.logBody}>
               <View style={styles.logRow}>
                 <Text style={[styles.logName, { color: colors.text }]}>
-                  {item.student?.user?.firstName} {item.student?.user?.lastName}
+                  {item.student?.firstName} {item.student?.lastName}
                 </Text>
                 <Badge variant={isOut ? 'warning' : 'success'} size="sm" label={isOut ? 'OUT' : 'IN'} />
               </View>
-              {item.student?.user?.usn && (
-                <Text style={{ fontSize: 11, color: colors.textTertiary }}>{item.student.user.usn}</Text>
+              {item.student?.usn && (
+                <Text style={{ fontSize: 11, color: colors.textTertiary }}>{item.student.usn}</Text>
               )}
               {item.notes && (
                 <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{item.notes}</Text>

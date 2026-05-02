@@ -4,7 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { Prisma, GateEntryType, GatePassStatus, ViolationType } from '@prisma/client';
+import { Prisma, GateEntryType, GatePassStatus, GatePassApprovalStatus, ViolationType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ViolationsService } from '../violations/violations.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -354,6 +354,7 @@ export class GateService {
         validFrom,
         validTo,
         status: GatePassStatus.ACTIVE,
+        approvalStatus: approvedById ? GatePassApprovalStatus.APPROVED : GatePassApprovalStatus.PENDING,
         approvedById,
       },
     });
@@ -382,13 +383,14 @@ export class GateService {
   }
 
   async findPasses(query: ListGatePassesQueryDto) {
-    const { page = 1, limit = 20, studentId, status, search } = query;
+    const { page = 1, limit = 20, studentId, status, approvalStatus, search } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.GatePassWhereInput = {};
 
     if (studentId) where.studentId = studentId;
     if (status) where.status = status as GatePassStatus;
+    if (approvalStatus) where.approvalStatus = approvalStatus as GatePassApprovalStatus;
 
     if (search) {
       where.OR = [
@@ -424,11 +426,20 @@ export class GateService {
     };
   }
 
-  async updatePass(id: string, dto: UpdateGatePassDto) {
+  async updatePass(id: string, dto: UpdateGatePassDto, updatedById?: string) {
     await this.findPassById(id);
 
     const data: Prisma.GatePassUpdateInput = {};
     if (dto.status) data.status = dto.status as GatePassStatus;
+    if (dto.approvalStatus) {
+      data.approvalStatus = dto.approvalStatus as GatePassApprovalStatus;
+      if (dto.approvalStatus === GatePassApprovalStatus.APPROVED && updatedById) {
+        data.approvedBy = { connect: { id: updatedById } };
+      }
+      if (dto.approvalStatus === GatePassApprovalStatus.PENDING || dto.approvalStatus === GatePassApprovalStatus.REJECTED) {
+        data.approvedBy = { disconnect: true };
+      }
+    }
 
     await this.prisma.gatePass.update({ where: { id }, data });
 

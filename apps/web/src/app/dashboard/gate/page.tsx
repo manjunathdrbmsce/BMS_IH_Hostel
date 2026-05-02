@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
-import { GATE_PASS_STATUSES } from '@/lib/constants';
+import { GATE_PASS_APPROVAL_STATUSES, GATE_PASS_STATUSES } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
@@ -28,6 +28,12 @@ const passStatusBadge: Record<string, 'default' | 'success' | 'danger' | 'info'>
   CANCELLED: 'danger',
 };
 
+const passApprovalStatusBadge: Record<string, 'default' | 'success' | 'danger' | 'info'> = {
+  PENDING: 'info',
+  APPROVED: 'success',
+  REJECTED: 'danger',
+};
+
 export default function GatePage() {
   const { hasRole, user } = useAuth();
   const { addToast } = useToast();
@@ -44,6 +50,7 @@ export default function GatePage() {
   const [typeFilter, setTypeFilter] = useState('');
   const [lateOnly, setLateOnly] = useState(false);
   const [passStatus, setPassStatus] = useState('');
+  const [passApprovalStatus, setPassApprovalStatus] = useState('');
   const [showCreateEntry, setShowCreateEntry] = useState(false);
   const [showCreatePass, setShowCreatePass] = useState(false);
   const [showDetail, setShowDetail] = useState<any>(null);
@@ -51,6 +58,7 @@ export default function GatePage() {
   const [passForm, setPassForm] = useState({ studentId: '', purpose: '', visitorName: '', visitorPhone: '', outDate: '', outTime: '', returnDate: '', returnTime: '' });
 
   const canManage = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'SECURITY_GUARD');
+  const canApprovePass = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN');
   const canCreatePass = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT');
 
   const fetchData = useCallback(async () => {
@@ -68,6 +76,7 @@ export default function GatePage() {
         const params = new URLSearchParams({ page: String(page), limit: '20' });
         if (search) params.set('search', search);
         if (passStatus) params.set('status', passStatus);
+        if (passApprovalStatus) params.set('approvalStatus', passApprovalStatus);
         const res = await api.get<any>(`/gate/passes?${params}`);
         setPasses(res.data || []);
         setTotalPages(res.meta?.totalPages || 1);
@@ -78,7 +87,7 @@ export default function GatePage() {
       }
     } catch (e) { console.error(e); }
     setLoading(false);
-  }, [tab, page, search, typeFilter, lateOnly, passStatus, canManage]);
+  }, [tab, page, search, typeFilter, lateOnly, passStatus, passApprovalStatus, canManage]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { setPage(1); setSearch(''); }, [tab]);
@@ -129,6 +138,20 @@ export default function GatePage() {
       addToast({ type: 'success', title: `Pass ${status.toLowerCase()}` });
     } catch (err: unknown) {
       addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to update pass' });
+    }
+  };
+
+  const handleUpdatePassApproval = async (id: string, approvalStatus: string) => {
+    try {
+      await api.patch<any>(`/gate/passes/${id}`, { approvalStatus });
+      fetchData();
+      if (showDetail?.id === id) {
+        const r = await api.get<any>(`/gate/passes/${id}`);
+        setShowDetail({ ...r.data, _type: 'pass' });
+      }
+      addToast({ type: 'success', title: `Pass ${approvalStatus.toLowerCase()}` });
+    } catch (err: unknown) {
+      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to update pass approval' });
     }
   };
 
@@ -211,10 +234,16 @@ export default function GatePage() {
               </>
             )}
             {tab === 'passes' && (
-              <select value={passStatus} onChange={(e) => { setPassStatus(e.target.value); setPage(1); }} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none">
-                <option value="">All Statuses</option>
-                {GATE_PASS_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </select>
+              <>
+                <select value={passApprovalStatus} onChange={(e) => { setPassApprovalStatus(e.target.value); setPage(1); }} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none">
+                  <option value="">All Approvals</option>
+                  {GATE_PASS_APPROVAL_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+                <select value={passStatus} onChange={(e) => { setPassStatus(e.target.value); setPage(1); }} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 outline-none">
+                  <option value="">All Usage Statuses</option>
+                  {GATE_PASS_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+              </>
             )}
           </div>
         </Card>
@@ -266,6 +295,7 @@ export default function GatePage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant={passApprovalStatusBadge[p.approvalStatus] || 'default'}>{GATE_PASS_APPROVAL_STATUSES.find(s => s.value === p.approvalStatus)?.label || p.approvalStatus}</Badge>
                       <Badge variant={passStatusBadge[p.status] || 'default'}>{GATE_PASS_STATUSES.find(s => s.value === p.status)?.label || p.status}</Badge>
                       <span className="text-xs text-gray-400">{fmtDate(p.validFrom)} \u2192 {fmtDate(p.validTo)}</span>
                     </div>
@@ -362,14 +392,21 @@ export default function GatePage() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div><span className="text-gray-500">Student</span><p className="font-medium">{showDetail.student?.firstName} {showDetail.student?.lastName}</p></div>
-              <div><span className="text-gray-500">Status</span><p><Badge variant={passStatusBadge[showDetail.status] || 'default'}>{GATE_PASS_STATUSES.find(s => s.value === showDetail.status)?.label}</Badge></p></div>
+              <div><span className="text-gray-500">Approval</span><p><Badge variant={passApprovalStatusBadge[showDetail.approvalStatus] || 'default'}>{GATE_PASS_APPROVAL_STATUSES.find(s => s.value === showDetail.approvalStatus)?.label}</Badge></p></div>
+              <div><span className="text-gray-500">Usage Status</span><p><Badge variant={passStatusBadge[showDetail.status] || 'default'}>{GATE_PASS_STATUSES.find(s => s.value === showDetail.status)?.label}</Badge></p></div>
               <div><span className="text-gray-500">Purpose</span><p className="font-medium">{showDetail.purpose}</p></div>
               <div><span className="text-gray-500">Valid</span><p className="font-medium text-xs">{fmtDate(showDetail.validFrom)} \u2192 {fmtDate(showDetail.validTo)}</p></div>
               {showDetail.visitorName && <div><span className="text-gray-500">Visitor</span><p className="font-medium">{showDetail.visitorName}</p></div>}
               {showDetail.visitorPhone && <div><span className="text-gray-500">Visitor Phone</span><p className="font-medium">{showDetail.visitorPhone}</p></div>}
               {showDetail.approvedBy && <div><span className="text-gray-500">Approved By</span><p className="font-medium">{showDetail.approvedBy.firstName} {showDetail.approvedBy.lastName}</p></div>}
             </div>
-            {canManage && showDetail.status === 'ACTIVE' && (
+            {canApprovePass && showDetail.approvalStatus === 'PENDING' && (
+              <div className="flex gap-2 pt-2 border-t">
+                <Button onClick={() => handleUpdatePassApproval(showDetail.id, 'APPROVED')} variant="primary" className="flex-1">Approve</Button>
+                <Button onClick={() => handleUpdatePassApproval(showDetail.id, 'REJECTED')} variant="danger" className="flex-1">Reject</Button>
+              </div>
+            )}
+            {canManage && showDetail.approvalStatus === 'APPROVED' && showDetail.status === 'ACTIVE' && (
               <div className="flex gap-2 pt-2 border-t">
                 <Button onClick={() => handleUpdatePass(showDetail.id, 'USED')} variant="primary" className="flex-1">Mark Used</Button>
                 <Button onClick={() => handleUpdatePass(showDetail.id, 'CANCELLED')} variant="danger" className="flex-1">Cancel</Button>

@@ -439,6 +439,7 @@ export class LeaveService {
           validFrom: leave.fromDate,
           validTo: leave.toDate,
           status: 'ACTIVE',
+          approvalStatus: 'APPROVED',
           approvedById: wardenId,
         },
       });

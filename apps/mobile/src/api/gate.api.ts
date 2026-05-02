@@ -1,5 +1,5 @@
 import apiClient, { type ApiResponse, type PaginationMeta } from './client';
-import type { GatePassStatusName } from '@/constants';
+import type { GatePassApprovalStatusName, GatePassStatusName } from '@/constants';
 
 // ── Types ──
 
@@ -11,7 +11,7 @@ export interface GateEntry {
   timestamp: string;
   linkedLeaveId: string | null;
   notes: string | null;
-  student?: { user: { firstName: string; lastName: string; usn: string | null } };
+  student?: { firstName: string; lastName: string; usn: string | null };
   createdAt: string;
 }
 
@@ -31,7 +31,8 @@ export interface GatePass {
   /** Alias for validTo */
   expectedIn: string;
   status: GatePassStatusName;
-  student?: { user: { firstName: string; lastName: string; usn: string | null } };
+  approvalStatus: GatePassApprovalStatusName;
+  student?: { firstName: string; lastName: string; usn: string | null };
   createdAt: string;
 }
 
@@ -46,11 +47,30 @@ export interface GateEntryListParams {
   search?: string;
 }
 
+function normalizeGatePass(pass: GatePass): GatePass {
+  return {
+    ...pass,
+    reason: pass.reason ?? pass.purpose,
+    destination: pass.destination ?? null,
+    expectedOut: pass.expectedOut ?? pass.validFrom,
+    expectedIn: pass.expectedIn ?? pass.validTo,
+  };
+}
+
+function normalizeGatePassResponse(response: any) {
+  const data = response.data.data;
+  response.data.data = Array.isArray(data)
+    ? data.map((pass) => normalizeGatePass(pass))
+    : normalizeGatePass(data);
+  return response;
+}
+
 export interface GatePassListParams {
   page?: number;
   limit?: number;
   studentId?: string;
   status?: GatePassStatusName;
+  approvalStatus?: GatePassApprovalStatusName;
   search?: string;
 }
 
@@ -80,16 +100,16 @@ export const gateApi = {
     visitorPhone?: string;
     validFrom: string;
     validTo: string;
-  }) => apiClient.post<ApiResponse<GatePass>>('/gate/passes', data),
+  }) => apiClient.post<ApiResponse<GatePass>>('/gate/passes', data).then(normalizeGatePassResponse),
 
   listPasses: (params?: GatePassListParams) =>
-    apiClient.get<ApiResponse<GatePass[]> & { meta: PaginationMeta }>('/gate/passes', { params }),
+    apiClient.get<ApiResponse<GatePass[]> & { meta: PaginationMeta }>('/gate/passes', { params }).then(normalizeGatePassResponse),
 
   getPass: (id: string) =>
-    apiClient.get<ApiResponse<GatePass>>(`/gate/passes/${id}`),
+    apiClient.get<ApiResponse<GatePass>>(`/gate/passes/${id}`).then(normalizeGatePassResponse),
 
-  updatePass: (id: string, data: { status?: GatePassStatusName }) =>
-    apiClient.patch<ApiResponse<GatePass>>(`/gate/passes/${id}`, data),
+  updatePass: (id: string, data: { status?: GatePassStatusName; approvalStatus?: GatePassApprovalStatusName }) =>
+    apiClient.patch<ApiResponse<GatePass>>(`/gate/passes/${id}`, data).then(normalizeGatePassResponse),
 
   stats: () =>
     apiClient.get<ApiResponse<Record<string, number>>>('/gate/stats'),

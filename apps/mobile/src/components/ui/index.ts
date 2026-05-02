@@ -10,6 +10,7 @@ export {
   LeaveStatusBadge,
   ComplaintStatusBadge,
   GatePassStatusBadge,
+  GatePassApprovalStatusBadge,
   AttendanceStatusBadge,
 } from './StatusBadge';
 export { ErrorBoundary } from './ErrorBoundary';

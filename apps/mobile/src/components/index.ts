@@ -12,6 +12,7 @@ export {
   LeaveStatusBadge,
   ComplaintStatusBadge,
   GatePassStatusBadge,
+  GatePassApprovalStatusBadge,
   AttendanceStatusBadge,
   ErrorBoundary,
 } from './ui';
