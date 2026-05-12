@@ -21,6 +21,11 @@ export default function WardenDashboard() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuthStore();
+  const roles = user?.roles.map((role) => role.name) ?? [];
+  const assignedHostels = user?.assignedHostels ?? [];
+  const isGlobalAdmin = roles.includes('SUPER_ADMIN') || roles.includes('HOSTEL_ADMIN');
+  const requiresHostelAssignment =
+    !isGlobalAdmin && (roles.includes('WARDEN') || roles.includes('DEPUTY_WARDEN'));
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -28,6 +33,12 @@ export default function WardenDashboard() {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = async () => {
+    if (requiresHostelAssignment && assignedHostels.length === 0) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     try {
       const [statsRes, notifRes] = await Promise.all([
         dashboardApi.stats(),
@@ -43,7 +54,7 @@ export default function WardenDashboard() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [assignedHostels.length, requiresHostelAssignment]);
   const onRefresh = () => { setRefreshing(true); loadData(); };
 
   const statCards = stats
@@ -88,8 +99,26 @@ export default function WardenDashboard() {
           </TouchableOpacity>
         </Animated.View>
 
+        {requiresHostelAssignment && assignedHostels.length === 0 ? (
+          <Animated.View entering={FadeInDown.delay(200).duration(500)}>
+            <Card style={{ padding: 18, marginBottom: 24 }}>
+              <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+                <View style={[styles.emptyIcon, { backgroundColor: '#F59E0B18' }]}>
+                  <Ionicons name="alert-circle-outline" size={24} color="#F59E0B" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.emptyTitle, { color: colors.text }]}>No hostel assigned</Text>
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                    Please contact an administrator to assign a hostel before using warden tools.
+                  </Text>
+                </View>
+              </View>
+            </Card>
+          </Animated.View>
+        ) : null}
+
         {/* Stats Grid */}
-        {loading ? (
+        {requiresHostelAssignment && assignedHostels.length === 0 ? null : loading ? (
           <View style={styles.statsGrid}>
             {[1, 2, 3, 4].map((i) => (
               <Skeleton key={i} width="48%" height={100} style={{ borderRadius: 16 }} />
@@ -111,6 +140,7 @@ export default function WardenDashboard() {
         )}
 
         {/* Quick Actions */}
+        {requiresHostelAssignment && assignedHostels.length === 0 ? null : (
         <Animated.View entering={FadeInDown.delay(300).duration(500)}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
           <View style={styles.actionsGrid}>
@@ -129,6 +159,7 @@ export default function WardenDashboard() {
             ))}
           </View>
         </Animated.View>
+        )}
       </ScrollView>
     </View>
   );
@@ -151,4 +182,7 @@ const styles = StyleSheet.create({
   actionCard: { width: '30%', padding: 16, borderRadius: 16, borderWidth: 1, alignItems: 'center' },
   actionIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   actionLabel: { fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  emptyIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  emptyText: { fontSize: 13, lineHeight: 19 },
 });

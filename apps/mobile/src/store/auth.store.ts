@@ -21,6 +21,7 @@ interface AuthState {
   // Helpers
   hasRole: (role: RoleName) => boolean;
   getRoles: () => RoleName[];
+  getAssignedHostels: () => NonNullable<User['assignedHostels']>;
   getNavigatorGroup: () => string;
   clearError: () => void;
 }
@@ -123,6 +124,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { user } = get();
     if (!user) return [];
     return user.roles.map((r) => r.name);
+  },
+
+  getAssignedHostels: () => {
+    const { user } = get();
+    return user?.assignedHostels ?? [];
   },
 
   getNavigatorGroup: () => {

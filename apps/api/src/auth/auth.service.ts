@@ -63,7 +63,7 @@ export class AuthService {
       include: {
         userRoles: {
           where: { revokedAt: null },
-          include: { role: true },
+          include: { role: true, hostel: true },
         },
       },
     });
@@ -111,7 +111,24 @@ export class AuthService {
     const roles = user.userRoles.map((ur) => ({
       name: ur.role.name,
       displayName: ur.role.displayName,
+      hostelId: ur.hostelId,
+      hostel: ur.hostel
+        ? {
+            id: ur.hostel.id,
+            code: ur.hostel.code,
+            name: ur.hostel.name,
+            status: ur.hostel.status,
+          }
+        : null,
     }));
+    const assignedHostels = user.userRoles
+      .filter((ur) => ur.role.name === 'WARDEN' && ur.hostel)
+      .map((ur) => ({
+        id: ur.hostel!.id,
+        code: ur.hostel!.code,
+        name: ur.hostel!.name,
+        status: ur.hostel!.status,
+      }));
     const tokens = await this.generateTokenPair(user.id, user.email, roleNames);
 
     // Store refresh token hash
@@ -145,6 +162,7 @@ export class AuthService {
         firstName: user.firstName,
         lastName: user.lastName,
         roles,
+        assignedHostels,
         status: user.status,
       },
     };
@@ -301,6 +319,7 @@ export class AuthService {
                 },
               },
             },
+            hostel: true,
           },
         },
       },
@@ -313,7 +332,24 @@ export class AuthService {
     const roles = user.userRoles.map((ur) => ({
       name: ur.role.name,
       displayName: ur.role.displayName,
+      hostelId: ur.hostelId,
+      hostel: ur.hostel
+        ? {
+            id: ur.hostel.id,
+            code: ur.hostel.code,
+            name: ur.hostel.name,
+            status: ur.hostel.status,
+          }
+        : null,
     }));
+    const assignedHostels = user.userRoles
+      .filter((ur) => ur.role.name === 'WARDEN' && ur.hostel)
+      .map((ur) => ({
+        id: ur.hostel!.id,
+        code: ur.hostel!.code,
+        name: ur.hostel!.name,
+        status: ur.hostel!.status,
+      }));
     const permissions = [
       ...new Set(
         user.userRoles.flatMap((ur) =>
@@ -329,6 +365,7 @@ export class AuthService {
       firstName: user.firstName,
       lastName: user.lastName,
       roles,
+      assignedHostels,
       permissions,
       status: user.status,
     };
@@ -351,6 +388,7 @@ export class AuthService {
                 },
               },
             },
+            hostel: true,
           },
         },
       },
@@ -364,6 +402,9 @@ export class AuthService {
       id: user.id,
       email: user.email,
       roles: user.userRoles.map((ur) => ur.role.name),
+      assignedHostelIds: user.userRoles
+        .filter((ur) => ur.role.name === 'WARDEN' && ur.hostelId)
+        .map((ur) => ur.hostelId),
       permissions: [
         ...new Set(
           user.userRoles.flatMap((ur) =>

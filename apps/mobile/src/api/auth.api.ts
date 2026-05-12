@@ -11,9 +11,17 @@ export interface User {
   lastName: string;
   usn: string | null;
   status: string;
-  roles: { name: RoleName; displayName?: string }[];
+  roles: { name: RoleName; displayName?: string; hostelId?: string | null; hostel?: AssignedHostel | null }[];
+  assignedHostels?: AssignedHostel[];
   studentProfile?: StudentProfile | null;
   createdAt: string;
+}
+
+export interface AssignedHostel {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
 }
 
 export interface StudentProfile {

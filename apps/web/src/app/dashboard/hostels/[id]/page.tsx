@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SearchPicker, type SearchPickerOption } from '@/components/ui/search-picker';
 import { useToast } from '@/components/ui/toast';
 import { EmptyState } from '@/components/ui/empty-state';
 import { formatStatus, statusColor } from '@/lib/utils';
@@ -30,6 +31,9 @@ import {
   Wifi,
   Wind,
   Droplets,
+  UserCheck,
+  Shield,
+  UserMinus,
 } from 'lucide-react';
 
 interface HostelDetail {
@@ -68,6 +72,39 @@ interface Room {
   }>;
 }
 
+interface WardenUser {
+  id: string;
+  email: string;
+  mobile: string | null;
+  firstName: string;
+  lastName: string;
+  status: string;
+  roles: Array<{
+    id?: string;
+    name: string;
+    displayName: string;
+    hostelId?: string | null;
+    hostel?: {
+      id: string;
+      code: string;
+      name: string;
+      status: string;
+    } | null;
+  }>;
+  assignedHostels?: Array<{
+    id: string;
+    code: string;
+    name: string;
+    status: string;
+  }>;
+}
+
+interface UsersResponse {
+  success: boolean;
+  data: WardenUser[];
+  meta: { total: number; page: number; limit: number; totalPages: number };
+}
+
 export default function HostelDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -77,12 +114,16 @@ export default function HostelDetailPage() {
 
   const [hostel, setHostel] = useState<HostelDetail | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [assignedWardens, setAssignedWardens] = useState<WardenUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [roomsLoading, setRoomsLoading] = useState(true);
+  const [wardensLoading, setWardensLoading] = useState(true);
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddRoomModal, setShowAddRoomModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showAssignWardenModal, setShowAssignWardenModal] = useState(false);
+  const [wardenToUnassign, setWardenToUnassign] = useState<WardenUser | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [selectedFloor, setSelectedFloor] = useState<number | null>(null);
@@ -90,6 +131,7 @@ export default function HostelDetailPage() {
   const [editForm, setEditForm] = useState({ name: '', address: '', contactNo: '', status: '' });
   const [roomForm, setRoomForm] = useState({ roomNo: '', floor: 0, type: 'DOUBLE' as string, capacity: 2, block: '', amenities: '' });
   const [bulkForm, setBulkForm] = useState({ fromFloor: 1, toFloor: 4, fromRoom: 1, toRoom: 10, type: 'DOUBLE' as string, capacity: 2, block: '' });
+  const [selectedWardenId, setSelectedWardenId] = useState('');
 
   useEffect(() => {
     if (!params.id) return;
@@ -124,6 +166,44 @@ export default function HostelDetailPage() {
   }, [params.id, selectedFloor]);
 
   useEffect(() => { fetchRooms(); }, [fetchRooms]);
+
+  const fetchAssignedWardens = useCallback(async () => {
+    if (!params.id) return;
+    setWardensLoading(true);
+    try {
+      const qs = new URLSearchParams({ role: 'WARDEN', limit: '200' });
+      const res = await api.get<UsersResponse>(`/users?${qs.toString()}`);
+      const hostelId = params.id as string;
+      setAssignedWardens(
+        res.data.filter((user) =>
+          user.roles.some((role) => role.name === 'WARDEN' && role.hostelId === hostelId),
+        ),
+      );
+    } catch {
+      setAssignedWardens([]);
+    } finally {
+      setWardensLoading(false);
+    }
+  }, [params.id]);
+
+  useEffect(() => { fetchAssignedWardens(); }, [fetchAssignedWardens]);
+
+  const searchWardens = useCallback(async (term: string): Promise<SearchPickerOption[]> => {
+    const qs = new URLSearchParams({ role: 'WARDEN', search: term, limit: '20' });
+    const res = await api.get<UsersResponse>(`/users?${qs.toString()}`);
+    const hostelId = params.id as string;
+    return res.data
+      .filter((user) => user.status === 'ACTIVE')
+      .map((user) => {
+        const assignedHere = user.roles.some((role) => role.name === 'WARDEN' && role.hostelId === hostelId);
+        const assignedCount = user.assignedHostels?.length ?? user.roles.filter((role) => role.name === 'WARDEN' && role.hostelId).length;
+        return {
+          value: user.id,
+          label: `${user.firstName} ${user.lastName}${assignedHere ? ' (already assigned)' : ''}`,
+          sublabel: `${user.email}${assignedCount ? ` · ${assignedCount} hostel${assignedCount === 1 ? '' : 's'}` : ''}`,
+        };
+      });
+  }, [params.id]);
 
   const handleEditHostel = async () => {
     setSaving(true);
@@ -172,6 +252,56 @@ export default function HostelDetailPage() {
     } catch (err: unknown) {
       addToast({ type: 'error', title: err instanceof Error ? err.message : 'Bulk create failed' });
     } finally { setSaving(false); }
+  };
+
+  const handleAssignWarden = async () => {
+    if (!selectedWardenId || !params.id) {
+      addToast({ type: 'error', title: 'Select a warden first' });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await api.post(`/users/${selectedWardenId}/roles`, {
+        roleName: 'WARDEN',
+        hostelId: params.id,
+      });
+      addToast({ type: 'success', title: 'Warden assigned to hostel' });
+      setSelectedWardenId('');
+      setShowAssignWardenModal(false);
+      fetchAssignedWardens();
+    } catch (err: unknown) {
+      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to assign warden' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const getHostelWardenAssignmentId = (warden: WardenUser) => {
+    const hostelId = params.id as string;
+    return warden.roles.find((role) => role.name === 'WARDEN' && role.hostelId === hostelId)?.id;
+  };
+
+  const handleUnassignWarden = async () => {
+    if (!wardenToUnassign) return;
+
+    const roleAssignmentId = getHostelWardenAssignmentId(wardenToUnassign);
+    if (!roleAssignmentId) {
+      addToast({ type: 'error', title: 'Unable to find warden assignment' });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await api.delete(`/users/${wardenToUnassign.id}/roles/${roleAssignmentId}`);
+      addToast({ type: 'success', title: 'Warden unassigned from hostel' });
+      setWardenToUnassign(null);
+      fetchAssignedWardens();
+    } catch (err: unknown) {
+      addToast({ type: 'error', title: err instanceof Error ? err.message : 'Failed to unassign warden' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Get unique floors
@@ -286,6 +416,58 @@ export default function HostelDetailPage() {
             </div>
           </Card>
         </div>
+
+        {/* Warden Assignment */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Assigned Warden</CardTitle>
+            {canWrite && (
+              <Button size="sm" onClick={() => setShowAssignWardenModal(true)}>
+                <UserCheck className="w-4 h-4 mr-1" /> Assign Warden
+              </Button>
+            )}
+          </CardHeader>
+          {wardensLoading ? (
+            <div className="p-4 space-y-3">
+              <Skeleton className="h-12" />
+              <Skeleton className="h-12" />
+            </div>
+          ) : assignedWardens.length === 0 ? (
+            <div className="px-4 pb-4">
+              <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                No warden is assigned to this hostel yet.
+              </div>
+            </div>
+          ) : (
+            <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {assignedWardens.map((warden) => (
+                <div key={warden.id} className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
+                      <Shield className="w-4 h-4 text-indigo-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{warden.firstName} {warden.lastName}</p>
+                      <p className="text-xs text-gray-500 truncate">{warden.email}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="info">WARDEN</Badge>
+                    {canWrite && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setWardenToUnassign(warden)}
+                      >
+                        <UserMinus className="w-4 h-4 mr-1" /> Unassign
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
 
         {/* Floor Filter */}
         <div className="flex items-center gap-2">
@@ -443,6 +625,53 @@ export default function HostelDetailPage() {
             <Button variant="outline" onClick={() => setShowBulkModal(false)}>Cancel</Button>
             <Button onClick={handleBulkCreate} loading={saving}>
               <Layers className="w-4 h-4 mr-1" /> Generate Rooms
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Assign Warden Modal */}
+      <Modal isOpen={showAssignWardenModal} onClose={() => setShowAssignWardenModal(false)} title="Assign Warden">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Select an active user with the WARDEN role. Each hostel can have only one assigned warden in the current workflow.
+          </p>
+          <SearchPicker
+            label="Warden"
+            value={selectedWardenId}
+            onChange={setSelectedWardenId}
+            onSearch={searchWardens}
+            placeholder="Search wardens by name or email"
+            emptyMessage="No active wardens found"
+            required
+          />
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={() => setShowAssignWardenModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAssignWarden} loading={saving} disabled={!selectedWardenId}>
+              <UserCheck className="w-4 h-4 mr-1" /> Assign Warden
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Unassign Warden Modal */}
+      <Modal
+        isOpen={!!wardenToUnassign}
+        onClose={() => setWardenToUnassign(null)}
+        title="Unassign Warden"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Remove {wardenToUnassign?.firstName} {wardenToUnassign?.lastName} from {hostel.name}? They will no longer see or manage this hostel.
+          </p>
+          <div className="flex justify-end gap-3 pt-4 border-t">
+            <Button variant="outline" onClick={() => setWardenToUnassign(null)}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleUnassignWarden} loading={saving}>
+              <UserMinus className="w-4 h-4 mr-1" /> Unassign
             </Button>
           </div>
         </div>

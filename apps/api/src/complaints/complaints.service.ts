@@ -8,6 +8,7 @@ import {
 import { Prisma, ComplaintStatus, ComplaintCategory, ComplaintPriority } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateComplaintDto, UpdateComplaintDto, ListComplaintsQueryDto } from './dto';
+import { HostelScope } from '../auth/access-scope.service';
 
 @Injectable()
 export class ComplaintsService {
@@ -15,7 +16,11 @@ export class ComplaintsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateComplaintDto) {
+  async create(dto: CreateComplaintDto, scope: HostelScope = 'ALL') {
+    if (scope !== 'ALL' && !scope.includes(dto.hostelId)) {
+      throw new NotFoundException('Hostel not found');
+    }
+
     // Verify student exists
     const student = await this.prisma.user.findUnique({
       where: { id: dto.studentId },
@@ -59,10 +64,10 @@ export class ComplaintsService {
       },
     });
 
-    return this.findById(complaint.id);
+    return this.findById(complaint.id, scope);
   }
 
-  async findById(id: string) {
+  async findById(id: string, scope: HostelScope = 'ALL') {
     const complaint = await this.prisma.complaint.findUnique({
       where: { id },
       include: {
@@ -90,10 +95,14 @@ export class ComplaintsService {
       throw new NotFoundException('Complaint not found');
     }
 
+    if (scope !== 'ALL' && !scope.includes(complaint.hostelId)) {
+      throw new NotFoundException('Complaint not found');
+    }
+
     return complaint;
   }
 
-  async findMany(query: ListComplaintsQueryDto) {
+  async findMany(query: ListComplaintsQueryDto, scope: HostelScope = 'ALL') {
     const { page = 1, limit = 20, studentId, hostelId, status, category, priority, search } = query;
     const skip = (page - 1) * limit;
 
@@ -101,6 +110,12 @@ export class ComplaintsService {
 
     if (studentId) where.studentId = studentId;
     if (hostelId) where.hostelId = hostelId;
+    if (scope !== 'ALL') {
+      if (hostelId && !scope.includes(hostelId)) {
+        throw new NotFoundException('Complaints not found');
+      }
+      where.hostelId = hostelId || { in: scope };
+    }
     if (status) where.status = status as ComplaintStatus;
     if (category) where.category = category as ComplaintCategory;
     if (priority) where.priority = priority as ComplaintPriority;
@@ -141,8 +156,8 @@ export class ComplaintsService {
     };
   }
 
-  async update(id: string, dto: UpdateComplaintDto) {
-    const complaint = await this.findById(id);
+  async update(id: string, dto: UpdateComplaintDto, scope: HostelScope = 'ALL') {
+    const complaint = await this.findById(id, scope);
 
     const data: Prisma.ComplaintUpdateInput = {};
 
@@ -170,11 +185,11 @@ export class ComplaintsService {
 
     await this.prisma.complaint.update({ where: { id }, data });
 
-    return this.findById(id);
+    return this.findById(id, scope);
   }
 
-  async addComment(complaintId: string, userId: string, message: string) {
-    await this.findById(complaintId); // 404 check
+  async addComment(complaintId: string, userId: string, message: string, scope: HostelScope = 'ALL') {
+    await this.findById(complaintId, scope); // 404 check
 
     const comment = await this.prisma.complaintComment.create({
       data: {
@@ -192,19 +207,22 @@ export class ComplaintsService {
     return comment;
   }
 
-  async getStats() {
+  async getStats(scope: HostelScope = 'ALL') {
+    const hostelWhere: Prisma.ComplaintWhereInput =
+      scope !== 'ALL' ? { hostelId: { in: scope } } : {};
     const [open, assigned, inProgress, resolved, closed, reopened] = await Promise.all([
-      this.prisma.complaint.count({ where: { status: 'OPEN' } }),
-      this.prisma.complaint.count({ where: { status: 'ASSIGNED' } }),
-      this.prisma.complaint.count({ where: { status: 'IN_PROGRESS' } }),
-      this.prisma.complaint.count({ where: { status: 'RESOLVED' } }),
-      this.prisma.complaint.count({ where: { status: 'CLOSED' } }),
-      this.prisma.complaint.count({ where: { status: 'REOPENED' } }),
+      this.prisma.complaint.count({ where: { ...hostelWhere, status: 'OPEN' } }),
+      this.prisma.complaint.count({ where: { ...hostelWhere, status: 'ASSIGNED' } }),
+      this.prisma.complaint.count({ where: { ...hostelWhere, status: 'IN_PROGRESS' } }),
+      this.prisma.complaint.count({ where: { ...hostelWhere, status: 'RESOLVED' } }),
+      this.prisma.complaint.count({ where: { ...hostelWhere, status: 'CLOSED' } }),
+      this.prisma.complaint.count({ where: { ...hostelWhere, status: 'REOPENED' } }),
     ]);
 
     const byCategory = await this.prisma.complaint.groupBy({
       by: ['category'],
       _count: { id: true },
+      where: hostelWhere,
     });
 
     return {

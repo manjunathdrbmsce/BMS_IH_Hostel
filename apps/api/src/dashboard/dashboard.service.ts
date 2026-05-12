@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { HostelScope } from '../auth/access-scope.service';
 
 @Injectable()
 export class DashboardService {
@@ -13,13 +14,32 @@ export class DashboardService {
      *  - All independent count queries are batched into Promise.all
      *  - Login trend uses a single groupBy instead of N+1 loop
      */
-    async getStats() {
+    async getStats(scope: HostelScope = 'ALL') {
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
         const weekAgo = new Date(today);
         weekAgo.setDate(weekAgo.getDate() - 7);
+        const hostelIds = scope === 'ALL' ? null : scope;
+        const hostelWhere = hostelIds ? { id: { in: hostelIds } } : {};
+        const activeHostelWhere = hostelIds
+            ? { id: { in: hostelIds }, status: 'ACTIVE' as const }
+            : { status: 'ACTIVE' as const };
+        const roomWhere = hostelIds ? { hostelId: { in: hostelIds } } : {};
+        const bedWhere = hostelIds ? { room: { hostelId: { in: hostelIds } } } : {};
+        const studentUserWhere = hostelIds
+            ? {
+                bedAssignments: {
+                    some: {
+                        status: 'ACTIVE' as const,
+                        bed: { room: { hostelId: { in: hostelIds } } },
+                    },
+                },
+            }
+            : {};
+        const leaveWhere = hostelIds ? { hostelId: { in: hostelIds } } : {};
+        const complaintWhere = hostelIds ? { hostelId: { in: hostelIds } } : {};
 
         // ── Batch ALL independent counts in one Promise.all ───────────
         const [
@@ -76,7 +96,7 @@ export class DashboardService {
             this.prisma.user.count(),
             this.prisma.user.count({ where: { status: 'ACTIVE' } }),
             this.prisma.userRole.count({
-                where: { role: { name: 'STUDENT' }, revokedAt: null },
+                where: { role: { name: 'STUDENT' }, revokedAt: null, user: studentUserWhere },
             }),
             this.prisma.userRole.count({
                 where: {
@@ -85,11 +105,11 @@ export class DashboardService {
                 },
             }),
             // ── Hostel counts ──
-            this.prisma.hostel.count(),
-            this.prisma.hostel.count({ where: { status: 'ACTIVE' } }),
-            this.prisma.room.count(),
-            this.prisma.bed.count(),
-            this.prisma.bed.count({ where: { status: 'OCCUPIED' } }),
+            this.prisma.hostel.count({ where: hostelWhere }),
+            this.prisma.hostel.count({ where: activeHostelWhere }),
+            this.prisma.room.count({ where: roomWhere }),
+            this.prisma.bed.count({ where: bedWhere }),
+            this.prisma.bed.count({ where: { ...bedWhere, status: 'OCCUPIED' } }),
             // ── Login activity ──
             this.prisma.auditLog.count({
                 where: { action: 'LOGIN', createdAt: { gte: weekAgo } },
@@ -128,21 +148,21 @@ export class DashboardService {
                 where: { policies: { some: { isActive: true } } },
             }),
             // ── Allotment stats ──
-            this.prisma.bedAssignment.count({ where: { status: 'ACTIVE' } }),
-            this.prisma.bedAssignment.count({ where: { status: 'VACATED' } }),
-            this.prisma.bedAssignment.count({ where: { status: 'TRANSFERRED' } }),
-            this.prisma.studentProfile.count(),
+            this.prisma.bedAssignment.count({ where: { status: 'ACTIVE', bed: bedWhere } }),
+            this.prisma.bedAssignment.count({ where: { status: 'VACATED', bed: bedWhere } }),
+            this.prisma.bedAssignment.count({ where: { status: 'TRANSFERRED', bed: bedWhere } }),
+            this.prisma.studentProfile.count({ where: { user: studentUserWhere } }),
             // ── Leave stats ──
-            this.prisma.leaveRequest.count({ where: { status: 'PENDING' } }),
-            this.prisma.leaveRequest.count({ where: { status: 'WARDEN_APPROVED' } }),
-            this.prisma.leaveRequest.count({ where: { status: 'REJECTED' } }),
+            this.prisma.leaveRequest.count({ where: { ...leaveWhere, status: 'PENDING' } }),
+            this.prisma.leaveRequest.count({ where: { ...leaveWhere, status: 'WARDEN_APPROVED' } }),
+            this.prisma.leaveRequest.count({ where: { ...leaveWhere, status: 'REJECTED' } }),
             // ── Complaint stats ──
             this.prisma.complaint.count({
-                where: { status: { in: ['OPEN', 'ASSIGNED', 'REOPENED'] } },
+                where: { ...complaintWhere, status: { in: ['OPEN', 'ASSIGNED', 'REOPENED'] } },
             }),
-            this.prisma.complaint.count({ where: { status: 'IN_PROGRESS' } }),
+            this.prisma.complaint.count({ where: { ...complaintWhere, status: 'IN_PROGRESS' } }),
             this.prisma.complaint.count({
-                where: { status: { in: ['RESOLVED', 'CLOSED'] } },
+                where: { ...complaintWhere, status: { in: ['RESOLVED', 'CLOSED'] } },
             }),
             // ── Notice stats ──
             this.prisma.notice.count({ where: { isActive: true } }),

@@ -28,6 +28,7 @@ import { AuditAction } from '../audit/audit.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { hasRole } from '../auth/helpers';
 import { PrismaService } from '../prisma/prisma.service';
+import { AccessScopeService } from '../auth/access-scope.service';
 
 @ApiTags('complaints')
 @Controller('complaints')
@@ -38,6 +39,7 @@ export class ComplaintsController {
   constructor(
     private readonly complaintsService: ComplaintsService,
     private readonly prisma: PrismaService,
+    private readonly accessScopeService: AccessScopeService,
   ) { }
 
   @Post()
@@ -47,7 +49,8 @@ export class ComplaintsController {
   @ApiResponse({ status: 201, description: 'Complaint created' })
   async create(@Body() dto: CreateComplaintDto, @CurrentUser() user: any) {
     // Auto-populate studentId and hostelId for STUDENT role from their JWT + bed assignment
-    if (hasRole(user, 'STUDENT')) {
+    const isStudent = hasRole(user, 'STUDENT');
+    if (isStudent) {
       dto.studentId = dto.studentId || user.sub || user.id;
 
       if (!dto.hostelId) {
@@ -67,7 +70,8 @@ export class ComplaintsController {
       }
     }
 
-    const complaint = await this.complaintsService.create(dto);
+    const scope = isStudent ? 'ALL' : await this.accessScopeService.getAccessibleHostelIds(user);
+    const complaint = await this.complaintsService.create(dto, scope);
     return { success: true, data: complaint };
   }
 
@@ -81,7 +85,8 @@ export class ComplaintsController {
     if (isStudent) {
       query.studentId = user.id;
     }
-    const result = await this.complaintsService.findMany(query);
+    const scope = isStudent ? 'ALL' : await this.accessScopeService.getAccessibleHostelIds(user);
+    const result = await this.complaintsService.findMany(query, scope);
     return { success: true, ...result };
   }
 
@@ -89,8 +94,9 @@ export class ComplaintsController {
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN')
   @ApiOperation({ summary: 'Get complaint statistics' })
   @ApiResponse({ status: 200, description: 'Complaint stats' })
-  async getStats() {
-    const stats = await this.complaintsService.getStats();
+  async getStats(@CurrentUser() user: any) {
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const stats = await this.complaintsService.getStats(scope);
     return { success: true, data: stats };
   }
 
@@ -100,9 +106,10 @@ export class ComplaintsController {
   @ApiResponse({ status: 200, description: 'Complaint details' })
   @ApiResponse({ status: 404, description: 'Complaint not found' })
   async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
-    const complaint = await this.complaintsService.findById(id);
-    // Students can only view their own complaints
     const isStudent = hasRole(user, 'STUDENT');
+    const scope = isStudent ? 'ALL' : await this.accessScopeService.getAccessibleHostelIds(user);
+    const complaint = await this.complaintsService.findById(id, scope);
+    // Students can only view their own complaints
     if (isStudent && complaint.studentId !== user.id) {
       throw new NotFoundException('Complaint not found');
     }
@@ -117,8 +124,10 @@ export class ComplaintsController {
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateComplaintDto,
+    @CurrentUser() user: any,
   ) {
-    const complaint = await this.complaintsService.update(id, dto);
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const complaint = await this.complaintsService.update(id, dto, scope);
     return { success: true, data: complaint };
   }
 
@@ -132,7 +141,9 @@ export class ComplaintsController {
     @Body() dto: AddCommentDto,
     @CurrentUser() user: any,
   ) {
-    const comment = await this.complaintsService.addComment(id, user.id, dto.message);
+    const isStudent = hasRole(user, 'STUDENT');
+    const scope = isStudent ? 'ALL' : await this.accessScopeService.getAccessibleHostelIds(user);
+    const comment = await this.complaintsService.addComment(id, user.id, dto.message, scope);
     return { success: true, data: comment };
   }
 }

@@ -16,8 +16,21 @@ export interface UserProfile {
   mobile: string | null;
   firstName: string;
   lastName: string;
-  roles: Array<{ name: string; displayName: string }>;
+  roles: Array<{
+    name: string;
+    displayName: string;
+    hostelId?: string | null;
+    hostel?: AssignedHostel | null;
+  }>;
+  assignedHostels?: AssignedHostel[];
   permissions: string[];
+  status: string;
+}
+
+export interface AssignedHostel {
+  id: string;
+  code: string;
+  name: string;
   status: string;
 }
 

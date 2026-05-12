@@ -31,6 +31,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { AuditInterceptor } from '../audit/audit.interceptor';
 import { AuditAction } from '../audit/audit.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { AccessScopeService } from '../auth/access-scope.service';
 
 @ApiTags('gate')
 @Controller('gate')
@@ -38,7 +39,10 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 @UseInterceptors(AuditInterceptor)
 @ApiBearerAuth('access-token')
 export class GateController {
-  constructor(private readonly gateService: GateService) {}
+  constructor(
+    private readonly gateService: GateService,
+    private readonly accessScopeService: AccessScopeService,
+  ) {}
 
   // ---- Entry/Exit ----
 
@@ -48,7 +52,8 @@ export class GateController {
   @ApiOperation({ summary: 'Log a gate entry/exit' })
   @ApiResponse({ status: 201, description: 'Gate entry created' })
   async createEntry(@Body() dto: CreateGateEntryDto, @CurrentUser() user: any) {
-    const entry = await this.gateService.createEntry(dto, user.id);
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const entry = await this.gateService.createEntry(dto, user.id, scope);
     return { success: true, data: entry };
   }
 
@@ -56,8 +61,9 @@ export class GateController {
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'SECURITY_GUARD')
   @ApiOperation({ summary: 'List gate entries with filters' })
   @ApiResponse({ status: 200, description: 'Gate entries list' })
-  async findEntries(@Query() query: ListGateEntriesQueryDto) {
-    const result = await this.gateService.findEntries(query);
+  async findEntries(@Query() query: ListGateEntriesQueryDto, @CurrentUser() user: any) {
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const result = await this.gateService.findEntries(query, scope);
     return { success: true, ...result };
   }
 
@@ -65,8 +71,9 @@ export class GateController {
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'SECURITY_GUARD')
   @ApiOperation({ summary: 'Get gate entry by ID' })
   @ApiResponse({ status: 200, description: 'Gate entry details' })
-  async findEntry(@Param('id', ParseUUIDPipe) id: string) {
-    const entry = await this.gateService.findEntryById(id);
+  async findEntry(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const entry = await this.gateService.findEntryById(id, scope);
     return { success: true, data: entry };
   }
 
@@ -85,8 +92,10 @@ export class GateController {
     if (!dto.studentId) {
       throw new ForbiddenException('studentId is required');
     }
-    const approvedById = user.roles?.includes('STUDENT') ? null : user.id;
-    const pass = await this.gateService.createPass(dto, approvedById);
+    const isStudent = user.roles?.includes('STUDENT');
+    const approvedById = isStudent ? null : user.id;
+    const scope = isStudent ? 'ALL' : await this.accessScopeService.getAccessibleHostelIds(user);
+    const pass = await this.gateService.createPass(dto, approvedById, scope);
     return { success: true, data: pass };
   }
 
@@ -99,7 +108,8 @@ export class GateController {
     if (user.roles?.includes('STUDENT')) {
       query.studentId = user.id;
     }
-    const result = await this.gateService.findPasses(query);
+    const scope = user.roles?.includes('STUDENT') ? 'ALL' : await this.accessScopeService.getAccessibleHostelIds(user);
+    const result = await this.gateService.findPasses(query, scope);
     return { success: true, ...result };
   }
 
@@ -108,7 +118,8 @@ export class GateController {
   @ApiOperation({ summary: 'Get gate pass by ID' })
   @ApiResponse({ status: 200, description: 'Gate pass details' })
   async findPass(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
-    const pass = await this.gateService.findPassById(id);
+    const scope = user.roles?.includes('STUDENT') ? 'ALL' : await this.accessScopeService.getAccessibleHostelIds(user);
+    const pass = await this.gateService.findPassById(id, scope);
     // Students can only view their own passes
     if (user.roles?.includes('STUDENT') && pass.studentId !== user.id) {
       throw new ForbiddenException('You can only view your own gate passes');
@@ -126,7 +137,8 @@ export class GateController {
     @Body() dto: UpdateGatePassDto,
     @CurrentUser() user: any,
   ) {
-    const pass = await this.gateService.updatePass(id, dto, user.id);
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const pass = await this.gateService.updatePass(id, dto, user.id, scope);
     return { success: true, data: pass };
   }
 
@@ -136,8 +148,9 @@ export class GateController {
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'SECURITY_GUARD')
   @ApiOperation({ summary: 'Get gate statistics' })
   @ApiResponse({ status: 200, description: 'Gate stats' })
-  async getStats() {
-    const stats = await this.gateService.getStats();
+  async getStats(@CurrentUser() user: any) {
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const stats = await this.gateService.getStats(scope);
     return { success: true, data: stats };
   }
 }

@@ -32,6 +32,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { AuditInterceptor } from '../audit/audit.interceptor';
 import { AuditAction } from '../audit/audit.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { AccessScopeService } from '../auth/access-scope.service';
 
 @ApiTags('attendance')
 @Controller('attendance')
@@ -42,6 +43,7 @@ export class AttendanceController {
     constructor(
         private readonly attendanceService: AttendanceService,
         private readonly deviceService: DeviceService,
+        private readonly accessScopeService: AccessScopeService,
     ) { }
 
     // =========================================================================
@@ -54,7 +56,8 @@ export class AttendanceController {
     @ApiOperation({ summary: 'Start an attendance roll-call session' })
     @ApiResponse({ status: 201, description: 'Session created with rotating QR' })
     async createSession(@Body() dto: CreateSessionDto, @CurrentUser() user: any) {
-        const session = await this.attendanceService.createSession(dto, user.id);
+        const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+        const session = await this.attendanceService.createSession(dto, user.id, scope);
         return { success: true, data: session };
     }
 
@@ -85,7 +88,8 @@ export class AttendanceController {
         @Param('id', ParseUUIDPipe) id: string,
         @CurrentUser() user: any,
     ) {
-        return this.attendanceService.cancelSession(id, user.id);
+        const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+        return this.attendanceService.cancelSession(id, user.id, scope);
     }
 
     // =========================================================================
@@ -96,8 +100,9 @@ export class AttendanceController {
     @Roles('STUDENT', 'SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN')
     @ApiOperation({ summary: 'List currently active sessions with names' })
     @ApiResponse({ status: 200, description: 'Active sessions with hostel names' })
-    async getActiveSessions() {
-        const sessions = await this.attendanceService.getActiveSessions();
+    async getActiveSessions(@CurrentUser() user: any) {
+        const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+        const sessions = await this.attendanceService.getActiveSessions(scope);
         return { success: true, data: sessions };
     }
 
@@ -123,8 +128,9 @@ export class AttendanceController {
     @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN')
     @ApiOperation({ summary: 'Get daily attendance records with filters' })
     @ApiResponse({ status: 200, description: 'Paginated daily attendance records' })
-    async getDailyAttendance(@Query() query: ListAttendanceQueryDto) {
-        const result = await this.attendanceService.getDailyAttendance(query);
+    async getDailyAttendance(@Query() query: ListAttendanceQueryDto, @CurrentUser() user: any) {
+        const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+        const result = await this.attendanceService.getDailyAttendance(query, scope);
         return { success: true, data: result.data, meta: result.meta };
     }
 
@@ -132,8 +138,9 @@ export class AttendanceController {
     @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'SECURITY_GUARD')
     @ApiOperation({ summary: 'Real-time presence board (in-hostel/out/on-leave counts)' })
     @ApiResponse({ status: 200, description: 'Presence board data' })
-    async getPresenceBoard(@Query('hostelId') hostelId?: string) {
-        const data = await this.attendanceService.getPresenceBoard(hostelId);
+    async getPresenceBoard(@Query('hostelId') hostelId: string | undefined, @CurrentUser() user: any) {
+        const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+        const data = await this.attendanceService.getPresenceBoard(hostelId, scope);
         return { success: true, data };
     }
 
@@ -143,9 +150,11 @@ export class AttendanceController {
     @ApiResponse({ status: 200, description: 'Hostel attendance summary' })
     async getHostelSummary(
         @Param('hostelId', ParseUUIDPipe) hostelId: string,
-        @Query('date') date?: string,
+        @Query('date') date: string | undefined,
+        @CurrentUser() user: any,
     ) {
-        const data = await this.attendanceService.getHostelSummary(hostelId, date);
+        const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+        const data = await this.attendanceService.getHostelSummary(hostelId, date, scope);
         return { success: true, data };
     }
 

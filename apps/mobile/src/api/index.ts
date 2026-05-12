@@ -1,5 +1,5 @@
 export { default as apiClient, type ApiResponse, type PaginationMeta } from './client';
-export { authApi, type User, type StudentProfile, type AuthTokens, type LoginResponse } from './auth.api';
+export { authApi, type User, type AssignedHostel, type StudentProfile, type AuthTokens, type LoginResponse } from './auth.api';
 export { leaveApi, type LeaveRequest, type LeaveEligibility } from './leave.api';
 export {
   attendanceApi,

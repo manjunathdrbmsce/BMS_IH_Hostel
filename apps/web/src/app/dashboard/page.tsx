@@ -156,8 +156,15 @@ export default function DashboardHomePage() {
 
   const isAdmin = hasRole(...ADMIN_ROLES);
   const isStudent = hasRole('STUDENT');
+  const isHostelScopedStaff = hasRole('WARDEN', 'DEPUTY_WARDEN') && !hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN');
+  const assignedHostels = user?.assignedHostels ?? [];
 
   useEffect(() => {
+    if (isHostelScopedStaff && assignedHostels.length === 0) {
+      setLoading(false);
+      return;
+    }
+
     if (!isAdmin) {
       // For students, fetch their registration status
       if (isStudent) {
@@ -176,7 +183,7 @@ export default function DashboardHomePage() {
       .then((res) => setStats(res.data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [isAdmin, isStudent]);
+  }, [isAdmin, isStudent, isHostelScopedStaff, assignedHostels.length]);
 
   const greeting = () => {
     const hour = new Date().getHours();
@@ -538,6 +545,32 @@ export default function DashboardHomePage() {
   }
 
   // ── Admin / Warden dashboard ─────────────────────────────────────────────
+  if (isHostelScopedStaff && assignedHostels.length === 0) {
+    return (
+      <div className="min-h-screen">
+        <Topbar
+          title={`${greeting()}, ${user?.firstName}!`}
+          subtitle="Your warden access is waiting for a hostel assignment."
+        />
+        <div className="p-6 animate-in">
+          <Card>
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">No hostel assigned</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Please contact an administrator to assign a hostel before using warden tools.
+                </p>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen">
       <Topbar

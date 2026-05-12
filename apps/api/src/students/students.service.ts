@@ -14,6 +14,7 @@ import {
   CreateGuardianLinkDto,
   UpdateGuardianLinkDto,
 } from './dto';
+import { HostelScope } from '../auth/access-scope.service';
 
 @Injectable()
 export class StudentsService {
@@ -68,7 +69,7 @@ export class StudentsService {
     return this.findProfileByUserId(dto.userId);
   }
 
-  async findProfileByUserId(userId: string) {
+  async findProfileByUserId(userId: string, scope: HostelScope = 'ALL') {
     const profile = await this.prisma.studentProfile.findUnique({
       where: { userId },
       include: {
@@ -117,6 +118,11 @@ export class StudentsService {
       }),
     ]);
 
+    const hostelId = activeAssignment?.bed?.room?.hostel?.id;
+    if (scope !== 'ALL' && (!hostelId || !scope.includes(hostelId))) {
+      throw new NotFoundException('Student profile not found');
+    }
+
     return {
       ...profile,
       guardians: guardians.map((g) => ({
@@ -150,7 +156,7 @@ export class StudentsService {
     return this.findProfileByUserId(profile.userId);
   }
 
-  async findMany(query: ListStudentsQueryDto) {
+  async findMany(query: ListStudentsQueryDto, scope: HostelScope = 'ALL') {
     const { page = 1, limit = 20, search, department, year } = query;
     const skip = (page - 1) * limit;
 
@@ -173,6 +179,22 @@ export class StudentsService {
 
     if (year) {
       where.year = year;
+    }
+
+    if (scope !== 'ALL') {
+      where.user = {
+        ...(where.user as Prisma.UserWhereInput),
+        bedAssignments: {
+          some: {
+            status: 'ACTIVE',
+            bed: {
+              room: {
+                hostelId: { in: scope },
+              },
+            },
+          },
+        },
+      };
     }
 
     const [profiles, total] = await Promise.all([

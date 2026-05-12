@@ -7,6 +7,7 @@ import {
 import { Prisma, HostelStatus, HostelType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateHostelDto, UpdateHostelDto, ListHostelsQueryDto } from './dto';
+import { HostelScope } from '../auth/access-scope.service';
 
 @Injectable()
 export class HostelsService {
@@ -40,7 +41,11 @@ export class HostelsService {
     return this.findById(hostel.id);
   }
 
-  async findById(id: string) {
+  async findById(id: string, scope: HostelScope = 'ALL') {
+    if (scope !== 'ALL' && !scope.includes(id)) {
+      throw new NotFoundException('Hostel not found');
+    }
+
     const hostel = await this.prisma.hostel.findUnique({
       where: { id },
       include: {
@@ -62,11 +67,15 @@ export class HostelsService {
     return this.mapHostelResponse(hostel);
   }
 
-  async findMany(query: ListHostelsQueryDto) {
+  async findMany(query: ListHostelsQueryDto, scope: HostelScope = 'ALL') {
     const { page = 1, limit = 20, search, type, status } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.HostelWhereInput = {};
+
+    if (scope !== 'ALL') {
+      where.id = { in: scope };
+    }
 
     if (search) {
       where.OR = [
@@ -141,10 +150,19 @@ export class HostelsService {
     return { message: 'Hostel deactivated' };
   }
 
-  async getStats() {
+  async getStats(scope: HostelScope = 'ALL') {
+    const hostelWhere: Prisma.HostelWhereInput = {
+      status: HostelStatus.ACTIVE,
+      ...(scope !== 'ALL' ? { id: { in: scope } } : {}),
+    };
+    const roomWhere: Prisma.RoomWhereInput =
+      scope !== 'ALL' ? { hostelId: { in: scope } } : {};
+    const bedWhere: Prisma.BedWhereInput =
+      scope !== 'ALL' ? { room: { hostelId: { in: scope } } } : {};
+
     const [hostels, totalRooms, totalBeds] = await Promise.all([
       this.prisma.hostel.findMany({
-        where: { status: HostelStatus.ACTIVE },
+        where: hostelWhere,
         include: {
           _count: { select: { rooms: true } },
           rooms: {
@@ -152,16 +170,16 @@ export class HostelsService {
           },
         },
       }),
-      this.prisma.room.count(),
-      this.prisma.bed.count(),
+      this.prisma.room.count({ where: roomWhere }),
+      this.prisma.bed.count({ where: bedWhere }),
     ]);
 
     const occupiedBeds = await this.prisma.bed.count({
-      where: { status: 'OCCUPIED' },
+      where: { ...bedWhere, status: 'OCCUPIED' },
     });
 
     const vacantBeds = await this.prisma.bed.count({
-      where: { status: 'VACANT' },
+      where: { ...bedWhere, status: 'VACANT' },
     });
 
     return {

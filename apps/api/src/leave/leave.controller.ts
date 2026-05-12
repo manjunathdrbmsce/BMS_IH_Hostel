@@ -25,6 +25,7 @@ import { AuditInterceptor } from '../audit/audit.interceptor';
 import { AuditAction } from '../audit/audit.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { hasRole } from '../auth/helpers';
+import { AccessScopeService } from '../auth/access-scope.service';
 
 @ApiTags('leave')
 @Controller('leave')
@@ -32,7 +33,10 @@ import { hasRole } from '../auth/helpers';
 @UseInterceptors(AuditInterceptor)
 @ApiBearerAuth('access-token')
 export class LeaveController {
-  constructor(private readonly leaveService: LeaveService) { }
+  constructor(
+    private readonly leaveService: LeaveService,
+    private readonly accessScopeService: AccessScopeService,
+  ) { }
 
   @Post()
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT')
@@ -65,7 +69,8 @@ export class LeaveController {
     if (isStudent || isParent) {
       query.studentId = user.id;
     }
-    const result = await this.leaveService.findMany(query);
+    const scope = isStudent || isParent ? 'ALL' : await this.accessScopeService.getAccessibleHostelIds(user);
+    const result = await this.leaveService.findMany(query, scope);
     return { success: true, ...result };
   }
 
@@ -73,8 +78,9 @@ export class LeaveController {
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN')
   @ApiOperation({ summary: 'Get leave request statistics' })
   @ApiResponse({ status: 200, description: 'Leave stats' })
-  async getStats() {
-    const stats = await this.leaveService.getStats();
+  async getStats(@CurrentUser() user: any) {
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const stats = await this.leaveService.getStats(scope);
     return { success: true, data: stats };
   }
 
@@ -84,10 +90,11 @@ export class LeaveController {
   @ApiResponse({ status: 200, description: 'Leave request details' })
   @ApiResponse({ status: 404, description: 'Leave request not found' })
   async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
-    const leave = await this.leaveService.findById(id);
-    // Students & parents can only view their own leave requests
     const isStudent = hasRole(user, 'STUDENT');
     const isParent = hasRole(user, 'PARENT');
+    const scope = isStudent || isParent ? 'ALL' : await this.accessScopeService.getAccessibleHostelIds(user);
+    const leave = await this.leaveService.findById(id, scope);
+    // Students & parents can only view their own leave requests
     if ((isStudent || isParent) && leave.studentId !== user.id) {
       throw new NotFoundException('Leave request not found');
     }
@@ -129,7 +136,8 @@ export class LeaveController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: any,
   ) {
-    const leave = await this.leaveService.wardenApprove(id, user.id);
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const leave = await this.leaveService.wardenApprove(id, user.id, scope);
     return { success: true, data: leave };
   }
 
@@ -143,7 +151,8 @@ export class LeaveController {
     @Body() dto: RejectLeaveDto,
     @CurrentUser() user: any,
   ) {
-    const leave = await this.leaveService.reject(id, user.id, dto.rejectionReason);
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const leave = await this.leaveService.reject(id, user.id, dto.rejectionReason, scope);
     return { success: true, data: leave };
   }
 

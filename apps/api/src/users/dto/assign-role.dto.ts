@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsUUID, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AssignRoleDto {
@@ -13,9 +13,9 @@ export class AssignRoleDto {
 
     @ApiPropertyOptional({
         description: 'ID of the hostel this role is scoped to (optional)',
-        example: 'a1b2c3d4-...',
+        example: 'a1b2c3d4-1234-4567-8901-123456789abc',
     })
-    @IsString()
     @IsOptional()
+    @IsUUID()
     hostelId?: string;
 }

@@ -12,6 +12,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { MessRebateService } from '../mess/mess-rebate.service';
 import { CreateLeaveRequestDto, ListLeaveQueryDto } from './dto';
+import { HostelScope } from '../auth/access-scope.service';
 
 @Injectable()
 export class LeaveService {
@@ -284,7 +285,7 @@ export class LeaveService {
     }
   }
 
-  async findById(id: string) {
+  async findById(id: string, scope: HostelScope = 'ALL') {
     const leave = await this.prisma.leaveRequest.findUnique({
       where: { id },
       include: {
@@ -307,10 +308,14 @@ export class LeaveService {
       throw new NotFoundException('Leave request not found');
     }
 
+    if (scope !== 'ALL' && !scope.includes(leave.hostelId)) {
+      throw new NotFoundException('Leave request not found');
+    }
+
     return leave;
   }
 
-  async findMany(query: ListLeaveQueryDto) {
+  async findMany(query: ListLeaveQueryDto, scope: HostelScope = 'ALL') {
     const { page = 1, limit = 20, studentId, hostelId, status, type, search } = query;
     const skip = (page - 1) * limit;
 
@@ -318,6 +323,12 @@ export class LeaveService {
 
     if (studentId) where.studentId = studentId;
     if (hostelId) where.hostelId = hostelId;
+    if (scope !== 'ALL') {
+      if (hostelId && !scope.includes(hostelId)) {
+        throw new NotFoundException('Leave requests not found');
+      }
+      where.hostelId = hostelId || { in: scope };
+    }
     if (status) where.status = status as LeaveStatus;
     if (type) where.type = type as LeaveType;
 
@@ -396,8 +407,8 @@ export class LeaveService {
    * Warden approves a leave request.
    * IMPORTANT: Warden can ONLY approve after parent has approved.
    */
-  async wardenApprove(id: string, wardenId: string) {
-    const leave = await this.findById(id);
+  async wardenApprove(id: string, wardenId: string, scope: HostelScope = 'ALL') {
+    const leave = await this.findById(id, scope);
 
     // Strict enforcement: parent must approve first
     if (leave.status !== 'PARENT_APPROVED') {
@@ -458,8 +469,8 @@ export class LeaveService {
     return this.findById(id);
   }
 
-  async reject(id: string, wardenId: string, rejectionReason: string) {
-    const leave = await this.findById(id);
+  async reject(id: string, wardenId: string, rejectionReason: string, scope: HostelScope = 'ALL') {
+    const leave = await this.findById(id, scope);
 
     if (['REJECTED', 'CANCELLED', 'WARDEN_APPROVED', 'PARENT_REJECTED'].includes(leave.status)) {
       throw new ConflictException('Leave request cannot be rejected in current status');
@@ -497,15 +508,17 @@ export class LeaveService {
     return this.findById(id);
   }
 
-  async getStats() {
+  async getStats(scope: HostelScope = 'ALL') {
+    const hostelWhere: Prisma.LeaveRequestWhereInput =
+      scope !== 'ALL' ? { hostelId: { in: scope } } : {};
     const [pending, parentApproved, parentRejected, wardenApproved, rejected, cancelled] =
       await Promise.all([
-        this.prisma.leaveRequest.count({ where: { status: 'PENDING' } }),
-        this.prisma.leaveRequest.count({ where: { status: 'PARENT_APPROVED' } }),
-        this.prisma.leaveRequest.count({ where: { status: 'PARENT_REJECTED' } }),
-        this.prisma.leaveRequest.count({ where: { status: 'WARDEN_APPROVED' } }),
-        this.prisma.leaveRequest.count({ where: { status: 'REJECTED' } }),
-        this.prisma.leaveRequest.count({ where: { status: 'CANCELLED' } }),
+        this.prisma.leaveRequest.count({ where: { ...hostelWhere, status: 'PENDING' } }),
+        this.prisma.leaveRequest.count({ where: { ...hostelWhere, status: 'PARENT_APPROVED' } }),
+        this.prisma.leaveRequest.count({ where: { ...hostelWhere, status: 'PARENT_REJECTED' } }),
+        this.prisma.leaveRequest.count({ where: { ...hostelWhere, status: 'WARDEN_APPROVED' } }),
+        this.prisma.leaveRequest.count({ where: { ...hostelWhere, status: 'REJECTED' } }),
+        this.prisma.leaveRequest.count({ where: { ...hostelWhere, status: 'CANCELLED' } }),
       ]);
 
     return {

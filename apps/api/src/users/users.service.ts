@@ -80,7 +80,7 @@ export class UsersService {
       include: {
         userRoles: {
           where: { revokedAt: null },
-          include: { role: true },
+          include: { role: true, hostel: true },
         },
       },
     });
@@ -107,7 +107,7 @@ export class UsersService {
         include: {
           userRoles: {
             where: { revokedAt: null },
-            include: { role: true },
+            include: { role: true, hostel: true },
           },
         },
       }),
@@ -133,7 +133,7 @@ export class UsersService {
       include: {
         userRoles: {
           where: { revokedAt: null },
-          include: { role: true },
+          include: { role: true, hostel: true },
         },
       },
     });
@@ -247,7 +247,16 @@ export class UsersService {
     status: UserStatus;
     createdAt: Date;
     updatedAt: Date;
-    userRoles: Array<{ role: { name: string; displayName: string } }>;
+    userRoles: Array<{
+      hostelId?: string | null;
+      role: { name: string; displayName: string };
+      hostel?: {
+        id: string;
+        code: string;
+        name: string;
+        status: string;
+      } | null;
+    }>;
   }) {
     return {
       id: user.id,
@@ -260,7 +269,24 @@ export class UsersService {
       roles: user.userRoles.map((ur) => ({
         name: ur.role.name,
         displayName: ur.role.displayName,
+        hostelId: ur.hostelId ?? null,
+        hostel: ur.hostel
+          ? {
+              id: ur.hostel.id,
+              code: ur.hostel.code,
+              name: ur.hostel.name,
+              status: ur.hostel.status,
+            }
+          : null,
       })),
+      assignedHostels: user.userRoles
+        .filter((ur) => ur.role.name === 'WARDEN' && ur.hostel)
+        .map((ur) => ({
+          id: ur.hostel!.id,
+          code: ur.hostel!.code,
+          name: ur.hostel!.name,
+          status: ur.hostel!.status,
+        })),
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

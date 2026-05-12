@@ -16,6 +16,7 @@ import {
   ListGateEntriesQueryDto,
   ListGatePassesQueryDto,
 } from './dto';
+import { HostelScope } from '../auth/access-scope.service';
 
 @Injectable()
 export class GateService {
@@ -32,7 +33,7 @@ export class GateService {
   // Gate Entries
   // -----------------------------------------------------------------------
 
-  async createEntry(dto: CreateGateEntryDto, scannedById: string | null) {
+  async createEntry(dto: CreateGateEntryDto, scannedById: string | null, scope: HostelScope = 'ALL') {
     // Verify student
     const student = await this.prisma.user.findUnique({
       where: { id: dto.studentId },
@@ -48,7 +49,11 @@ export class GateService {
     });
 
     const buildingId = assignment?.bed?.room?.hostel?.buildingId || null;
+    const hostelId = assignment?.bed?.room?.hostel?.id || null;
     const hostelName = assignment?.bed?.room?.hostel?.name || 'Hostel';
+    if (scope !== 'ALL' && (!hostelId || !scope.includes(hostelId))) {
+      throw new NotFoundException('Student not found');
+    }
 
     // Get linked leave if provided
     let leaveToDate: Date | null = null;
@@ -234,10 +239,10 @@ export class GateService {
       this.logger.warn(`Attendance auto-update from gate failed: ${err?.message}`);
     }
 
-    return this.findEntryById(result.entry.id);
+    return this.findEntryById(result.entry.id, scope);
   }
 
-  async findEntryById(id: string) {
+  async findEntryById(id: string, scope: HostelScope = 'ALL') {
     const entry = await this.prisma.gateEntry.findUnique({
       where: { id },
       include: {
@@ -274,10 +279,20 @@ export class GateService {
       throw new NotFoundException('Gate entry not found');
     }
 
+    if (scope !== 'ALL') {
+      const assignment = await this.prisma.bedAssignment.findFirst({
+        where: { studentId: entry.studentId, status: 'ACTIVE' },
+        include: { bed: { include: { room: true } } },
+      });
+      if (!assignment || !scope.includes(assignment.bed.room.hostelId)) {
+        throw new NotFoundException('Gate entry not found');
+      }
+    }
+
     return entry;
   }
 
-  async findEntries(query: ListGateEntriesQueryDto) {
+  async findEntries(query: ListGateEntriesQueryDto, scope: HostelScope = 'ALL') {
     const { page = 1, limit = 20, studentId, type, lateOnly, fromDate, toDate, search } = query;
     const skip = (page - 1) * limit;
 
@@ -330,13 +345,23 @@ export class GateService {
   // Gate Passes
   // -----------------------------------------------------------------------
 
-  async createPass(dto: CreateGatePassDto, approvedById: string | null) {
+  async createPass(dto: CreateGatePassDto, approvedById: string | null, scope: HostelScope = 'ALL') {
     const studentId = dto.studentId!;
     const student = await this.prisma.user.findUnique({
       where: { id: studentId },
     });
     if (!student) {
       throw new NotFoundException('Student not found');
+    }
+
+    if (scope !== 'ALL') {
+      const assignment = await this.prisma.bedAssignment.findFirst({
+        where: { studentId, status: 'ACTIVE' },
+        include: { bed: { include: { room: true } } },
+      });
+      if (!assignment || !scope.includes(assignment.bed.room.hostelId)) {
+        throw new NotFoundException('Student not found');
+      }
     }
 
     const validFrom = new Date(dto.validFrom);
@@ -359,10 +384,10 @@ export class GateService {
       },
     });
 
-    return this.findPassById(pass.id);
+    return this.findPassById(pass.id, scope);
   }
 
-  async findPassById(id: string) {
+  async findPassById(id: string, scope: HostelScope = 'ALL') {
     const pass = await this.prisma.gatePass.findUnique({
       where: { id },
       include: {
@@ -379,16 +404,46 @@ export class GateService {
       throw new NotFoundException('Gate pass not found');
     }
 
+    if (scope !== 'ALL') {
+      const assignment = await this.prisma.bedAssignment.findFirst({
+        where: { studentId: pass.studentId, status: 'ACTIVE' },
+        include: { bed: { include: { room: true } } },
+      });
+      if (!assignment || !scope.includes(assignment.bed.room.hostelId)) {
+        throw new NotFoundException('Gate pass not found');
+      }
+    }
+
     return pass;
   }
 
-  async findPasses(query: ListGatePassesQueryDto) {
+  async findPasses(query: ListGatePassesQueryDto, scope: HostelScope = 'ALL') {
     const { page = 1, limit = 20, studentId, status, approvalStatus, search } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.GatePassWhereInput = {};
 
     if (studentId) where.studentId = studentId;
+    if (scope !== 'ALL') {
+      where.student = {
+        bedAssignments: {
+          some: {
+            status: 'ACTIVE',
+            bed: { room: { hostelId: { in: scope } } },
+          },
+        },
+      };
+    }
+    if (scope !== 'ALL') {
+      where.student = {
+        bedAssignments: {
+          some: {
+            status: 'ACTIVE',
+            bed: { room: { hostelId: { in: scope } } },
+          },
+        },
+      };
+    }
     if (status) where.status = status as GatePassStatus;
     if (approvalStatus) where.approvalStatus = approvalStatus as GatePassApprovalStatus;
 
@@ -426,8 +481,8 @@ export class GateService {
     };
   }
 
-  async updatePass(id: string, dto: UpdateGatePassDto, updatedById?: string) {
-    await this.findPassById(id);
+  async updatePass(id: string, dto: UpdateGatePassDto, updatedById?: string, scope: HostelScope = 'ALL') {
+    await this.findPassById(id, scope);
 
     const data: Prisma.GatePassUpdateInput = {};
     if (dto.status) data.status = dto.status as GatePassStatus;
@@ -443,26 +498,40 @@ export class GateService {
 
     await this.prisma.gatePass.update({ where: { id }, data });
 
-    return this.findPassById(id);
+    return this.findPassById(id, scope);
   }
 
   // -----------------------------------------------------------------------
   // Stats
   // -----------------------------------------------------------------------
 
-  async getStats() {
+  async getStats(scope: HostelScope = 'ALL') {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
+    const studentScope =
+      scope !== 'ALL'
+        ? {
+            student: {
+              bedAssignments: {
+                some: {
+                  status: 'ACTIVE' as const,
+                  bed: { room: { hostelId: { in: scope } } },
+                },
+              },
+            },
+          }
+        : {};
+
     const [todayIn, todayOut, todayLate, totalLate, activePasses, usedPasses] = await Promise.all([
-      this.prisma.gateEntry.count({ where: { type: 'IN', timestamp: { gte: today, lt: tomorrow } } }),
-      this.prisma.gateEntry.count({ where: { type: 'OUT', timestamp: { gte: today, lt: tomorrow } } }),
-      this.prisma.gateEntry.count({ where: { isLateEntry: true, timestamp: { gte: today, lt: tomorrow } } }),
-      this.prisma.gateEntry.count({ where: { isLateEntry: true } }),
-      this.prisma.gatePass.count({ where: { status: 'ACTIVE' } }),
-      this.prisma.gatePass.count({ where: { status: 'USED' } }),
+      this.prisma.gateEntry.count({ where: { ...studentScope, type: 'IN', timestamp: { gte: today, lt: tomorrow } } }),
+      this.prisma.gateEntry.count({ where: { ...studentScope, type: 'OUT', timestamp: { gte: today, lt: tomorrow } } }),
+      this.prisma.gateEntry.count({ where: { ...studentScope, isLateEntry: true, timestamp: { gte: today, lt: tomorrow } } }),
+      this.prisma.gateEntry.count({ where: { ...studentScope, isLateEntry: true } }),
+      this.prisma.gatePass.count({ where: { ...studentScope, status: 'ACTIVE' } }),
+      this.prisma.gatePass.count({ where: { ...studentScope, status: 'USED' } }),
     ]);
 
     return {

@@ -29,6 +29,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AuditInterceptor } from '../audit/audit.interceptor';
 import { AuditAction } from '../audit/audit.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { AccessScopeService } from '../auth/access-scope.service';
 
 @ApiTags('hostels')
 @Controller('rooms')
@@ -36,7 +38,10 @@ import { AuditAction } from '../audit/audit.decorator';
 @UseInterceptors(AuditInterceptor)
 @ApiBearerAuth('access-token')
 export class RoomsController {
-  constructor(private readonly roomsService: RoomsService) {}
+  constructor(
+    private readonly roomsService: RoomsService,
+    private readonly accessScopeService: AccessScopeService,
+  ) {}
 
   @Post()
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN')
@@ -62,8 +67,9 @@ export class RoomsController {
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN')
   @ApiOperation({ summary: 'List rooms for a hostel' })
   @ApiResponse({ status: 200, description: 'Rooms list' })
-  async findAll(@Query() query: ListRoomsQueryDto) {
-    const result = await this.roomsService.findMany(query);
+  async findAll(@Query() query: ListRoomsQueryDto, @CurrentUser() user: any) {
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const result = await this.roomsService.findMany(query, scope);
     return { success: true, ...result };
   }
 
@@ -71,8 +77,9 @@ export class RoomsController {
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN')
   @ApiOperation({ summary: 'Get room by ID with bed details' })
   @ApiResponse({ status: 200, description: 'Room details' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    const room = await this.roomsService.findById(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const room = await this.roomsService.findById(id, scope);
     return { success: true, data: room };
   }
 

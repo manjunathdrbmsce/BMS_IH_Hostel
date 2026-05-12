@@ -15,6 +15,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { createHmac, randomBytes } from 'crypto';
 import { CreateSessionDto, MarkAttendanceDto, ListAttendanceQueryDto, StudentAttendanceQueryDto } from './dto';
+import { HostelScope } from '../auth/access-scope.service';
 
 @Injectable()
 export class AttendanceService {
@@ -30,7 +31,11 @@ export class AttendanceService {
      * Warden starts a roll-call session.
      * Creates a session with a random secret, GPS anchor, and TTL.
      */
-    async createSession(dto: CreateSessionDto, createdById: string) {
+    async createSession(dto: CreateSessionDto, createdById: string, scope: HostelScope = 'ALL') {
+        if (scope !== 'ALL' && !scope.includes(dto.hostelId)) {
+            throw new NotFoundException('Hostel not found');
+        }
+
         // Verify hostel exists
         const hostel = await this.prisma.hostel.findUnique({
             where: { id: dto.hostelId },
@@ -450,7 +455,7 @@ export class AttendanceService {
     /**
      * Get daily attendance records with filters.
      */
-    async getDailyAttendance(query: ListAttendanceQueryDto) {
+    async getDailyAttendance(query: ListAttendanceQueryDto, scope: HostelScope = 'ALL') {
         const { page = 1, limit = 20, date, hostelId, status, search } = query;
         const skip = (page - 1) * limit;
 
@@ -464,12 +469,17 @@ export class AttendanceService {
             where.status = status as AttendanceStatus;
         }
 
-        if (hostelId) {
+        if (scope !== 'ALL' && hostelId && !scope.includes(hostelId)) {
+            throw new NotFoundException('Attendance records not found');
+        }
+
+        const scopedHostelIds = scope === 'ALL' ? (hostelId ? [hostelId] : null) : (hostelId ? [hostelId] : scope);
+        if (scopedHostelIds) {
             where.student = {
                 bedAssignments: {
                     some: {
                         status: 'ACTIVE',
-                        bed: { room: { hostelId } },
+                        bed: { room: { hostelId: { in: scopedHostelIds } } },
                     },
                 },
             };
@@ -570,10 +580,15 @@ export class AttendanceService {
     /**
      * Real-time presence board — counts by status.
      */
-    async getPresenceBoard(hostelId?: string) {
+    async getPresenceBoard(hostelId?: string, scope: HostelScope = 'ALL') {
+        if (scope !== 'ALL' && hostelId && !scope.includes(hostelId)) {
+            throw new NotFoundException('Presence board not found');
+        }
+
+        const scopedHostelIds = scope === 'ALL' ? (hostelId ? [hostelId] : null) : (hostelId ? [hostelId] : scope);
         const baseWhere: Prisma.BedAssignmentWhereInput = {
             status: 'ACTIVE',
-            ...(hostelId ? { bed: { room: { hostelId } } } : {}),
+            ...(scopedHostelIds ? { bed: { room: { hostelId: { in: scopedHostelIds } } } } : {}),
         };
 
         const [inHostel, outCampus, onLeave, total] = await Promise.all([
@@ -601,7 +616,11 @@ export class AttendanceService {
     /**
      * Get hostel summary for a specific date.
      */
-    async getHostelSummary(hostelId: string, date?: string) {
+    async getHostelSummary(hostelId: string, date?: string, scope: HostelScope = 'ALL') {
+        if (scope !== 'ALL' && !scope.includes(hostelId)) {
+            throw new NotFoundException('Hostel summary not found');
+        }
+
         const targetDate = date ? this.getDateOnly(new Date(date)) : this.getDateOnly(new Date());
 
         const studentIds = await this.prisma.bedAssignment.findMany({
@@ -657,11 +676,12 @@ export class AttendanceService {
      * Returns all currently active sessions with human-readable names.
      * Used by the student UI to select a session without entering a raw UUID.
      */
-    async getActiveSessions() {
+    async getActiveSessions(scope: HostelScope = 'ALL') {
         return this.prisma.attendanceSession.findMany({
             where: {
                 status: 'ACTIVE',
                 expiresAt: { gt: new Date() },
+                ...(scope !== 'ALL' ? { hostelId: { in: scope } } : {}),
             },
             select: {
                 id: true,
@@ -698,11 +718,14 @@ export class AttendanceService {
     /**
      * Cancel a session (warden action).
      */
-    async cancelSession(sessionId: string, userId: string) {
+    async cancelSession(sessionId: string, userId: string, scope: HostelScope = 'ALL') {
         const session = await this.prisma.attendanceSession.findUnique({
             where: { id: sessionId },
         });
         if (!session) {
+            throw new NotFoundException('Session not found');
+        }
+        if (scope !== 'ALL' && !scope.includes(session.hostelId)) {
             throw new NotFoundException('Session not found');
         }
         if (session.status !== 'ACTIVE') {

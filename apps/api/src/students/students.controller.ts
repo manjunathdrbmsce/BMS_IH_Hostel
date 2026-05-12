@@ -30,6 +30,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AuditInterceptor } from '../audit/audit.interceptor';
 import { AuditAction } from '../audit/audit.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { AccessScopeService } from '../auth/access-scope.service';
 
 @ApiTags('students')
 @Controller('students')
@@ -37,7 +39,10 @@ import { AuditAction } from '../audit/audit.decorator';
 @UseInterceptors(AuditInterceptor)
 @ApiBearerAuth('access-token')
 export class StudentsController {
-  constructor(private readonly studentsService: StudentsService) {}
+  constructor(
+    private readonly studentsService: StudentsService,
+    private readonly accessScopeService: AccessScopeService,
+  ) {}
 
   // -----------------------------------------------------------------------
   // Student Profiles
@@ -58,8 +63,9 @@ export class StudentsController {
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN')
   @ApiOperation({ summary: 'List student profiles with pagination' })
   @ApiResponse({ status: 200, description: 'Students list' })
-  async findAll(@Query() query: ListStudentsQueryDto) {
-    const result = await this.studentsService.findMany(query);
+  async findAll(@Query() query: ListStudentsQueryDto, @CurrentUser() user: any) {
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const result = await this.studentsService.findMany(query, scope);
     return { success: true, ...result };
   }
 
@@ -68,8 +74,9 @@ export class StudentsController {
   @ApiOperation({ summary: 'Get student profile by user ID' })
   @ApiResponse({ status: 200, description: 'Student profile details' })
   @ApiResponse({ status: 404, description: 'Profile not found' })
-  async findOne(@Param('userId', ParseUUIDPipe) userId: string) {
-    const profile = await this.studentsService.findProfileByUserId(userId);
+  async findOne(@Param('userId', ParseUUIDPipe) userId: string, @CurrentUser() user: any) {
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const profile = await this.studentsService.findProfileByUserId(userId, scope);
     return { success: true, data: profile };
   }
 

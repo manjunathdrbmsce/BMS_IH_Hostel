@@ -9,6 +9,9 @@ import {
     UseInterceptors,
     ParseUUIDPipe,
     ForbiddenException,
+    BadRequestException,
+    NotFoundException,
+    ConflictException,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -25,6 +28,7 @@ import { AuditAction } from '../audit/audit.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignRoleDto } from './dto/assign-role.dto';
+import { HostelStatus, UserStatus } from '@prisma/client';
 
 /**
  * Role management API — assign/revoke roles for users.
@@ -38,6 +42,15 @@ import { AssignRoleDto } from './dto/assign-role.dto';
 export class RolesController {
     constructor(private readonly prisma: PrismaService) { }
 
+    private readonly hostelScopedRoles = new Set([
+        'WARDEN',
+        'DEPUTY_WARDEN',
+        'SECURITY_GUARD',
+        'MESS_MANAGER',
+        'MESS_STAFF',
+        'MAINTENANCE_STAFF',
+    ]);
+
     @Get()
     @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN')
     @ApiOperation({ summary: 'List roles for a user' })
@@ -45,7 +58,7 @@ export class RolesController {
     async listRoles(@Param('userId', ParseUUIDPipe) userId: string) {
         const roles = await this.prisma.userRole.findMany({
             where: { userId, revokedAt: null },
-            include: { role: true },
+            include: { role: true, hostel: true },
             orderBy: { grantedAt: 'desc' },
         });
 
@@ -56,6 +69,14 @@ export class RolesController {
                 roleName: ur.role.name,
                 displayName: ur.role.displayName,
                 hostelId: ur.hostelId,
+                hostel: ur.hostel
+                    ? {
+                        id: ur.hostel.id,
+                        code: ur.hostel.code,
+                        name: ur.hostel.name,
+                        status: ur.hostel.status,
+                    }
+                    : null,
                 grantedAt: ur.grantedAt,
                 grantedBy: ur.grantedBy,
             })),
@@ -78,7 +99,11 @@ export class RolesController {
         // Verify user exists
         const user = await this.prisma.user.findUnique({ where: { id: userId } });
         if (!user) {
-            throw new ForbiddenException('User not found');
+            throw new NotFoundException('User not found');
+        }
+
+        if (user.status !== UserStatus.ACTIVE) {
+            throw new BadRequestException('Only active users can be assigned roles');
         }
 
         // Find role
@@ -86,7 +111,29 @@ export class RolesController {
             where: { name: dto.roleName },
         });
         if (!role) {
-            throw new ForbiddenException(`Role "${dto.roleName}" not found`);
+            throw new NotFoundException(`Role "${dto.roleName}" not found`);
+        }
+
+        if (this.hostelScopedRoles.has(role.name) && !dto.hostelId) {
+            throw new BadRequestException(`hostelId is required when assigning "${role.name}"`);
+        }
+
+        if (!this.hostelScopedRoles.has(role.name) && dto.hostelId) {
+            throw new BadRequestException(`hostelId can only be used with hostel-scoped roles`);
+        }
+
+        if (dto.hostelId) {
+            const hostel = await this.prisma.hostel.findUnique({
+                where: { id: dto.hostelId },
+            });
+
+            if (!hostel) {
+                throw new NotFoundException('Hostel not found');
+            }
+
+            if (hostel.status !== HostelStatus.ACTIVE) {
+                throw new BadRequestException('Only active hostels can be assigned to wardens or staff');
+            }
         }
 
         // Check for existing active assignment
@@ -94,11 +141,43 @@ export class RolesController {
             where: {
                 userId,
                 roleId: role.id,
+                hostelId: dto.hostelId || null,
                 revokedAt: null,
             },
         });
         if (existing) {
-            throw new ForbiddenException(`Role "${dto.roleName}" is already assigned to this user`);
+            throw new ConflictException(
+                dto.hostelId
+                    ? `Role "${dto.roleName}" is already assigned to this user for the selected hostel`
+                    : `Role "${dto.roleName}" is already assigned to this user`,
+            );
+        }
+
+        if (role.name === 'WARDEN' && dto.hostelId) {
+            const existingHostelWarden = await this.prisma.userRole.findFirst({
+                where: {
+                    roleId: role.id,
+                    hostelId: dto.hostelId,
+                    revokedAt: null,
+                    userId: { not: userId },
+                },
+                include: {
+                    user: {
+                        select: {
+                            id: true,
+                            firstName: true,
+                            lastName: true,
+                            email: true,
+                        },
+                    },
+                },
+            });
+
+            if (existingHostelWarden) {
+                throw new ConflictException(
+                    `This hostel already has an assigned warden: ${existingHostelWarden.user.firstName} ${existingHostelWarden.user.lastName} (${existingHostelWarden.user.email})`,
+                );
+            }
         }
 
         const userRole = await this.prisma.userRole.create({
@@ -108,7 +187,7 @@ export class RolesController {
                 hostelId: dto.hostelId || null,
                 grantedBy,
             },
-            include: { role: true },
+            include: { role: true, hostel: true },
         });
 
         return {
@@ -118,6 +197,14 @@ export class RolesController {
                 roleName: userRole.role.name,
                 displayName: userRole.role.displayName,
                 hostelId: userRole.hostelId,
+                hostel: userRole.hostel
+                    ? {
+                        id: userRole.hostel.id,
+                        code: userRole.hostel.code,
+                        name: userRole.hostel.name,
+                        status: userRole.hostel.status,
+                    }
+                    : null,
                 grantedAt: userRole.grantedAt,
                 grantedBy: userRole.grantedBy,
             },
@@ -125,7 +212,7 @@ export class RolesController {
     }
 
     @Delete(':roleAssignmentId')
-    @Roles('SUPER_ADMIN')
+    @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN')
     @Throttle({ default: { ttl: 60000, limit: 5 } })
     @AuditAction('ROLE_REVOKE', 'users')
     @ApiOperation({ summary: 'Revoke a role from a user' })

@@ -24,6 +24,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AuditInterceptor } from '../audit/audit.interceptor';
 import { AuditAction } from '../audit/audit.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { AccessScopeService } from '../auth/access-scope.service';
 
 @ApiTags('hostels')
 @Controller('hostels')
@@ -31,7 +33,10 @@ import { AuditAction } from '../audit/audit.decorator';
 @UseInterceptors(AuditInterceptor)
 @ApiBearerAuth('access-token')
 export class HostelsController {
-  constructor(private readonly hostelsService: HostelsService) {}
+  constructor(
+    private readonly hostelsService: HostelsService,
+    private readonly accessScopeService: AccessScopeService,
+  ) {}
 
   @Post()
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN')
@@ -48,8 +53,9 @@ export class HostelsController {
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT')
   @ApiOperation({ summary: 'List hostels with pagination' })
   @ApiResponse({ status: 200, description: 'Hostels list' })
-  async findAll(@Query() query: ListHostelsQueryDto) {
-    const result = await this.hostelsService.findMany(query);
+  async findAll(@Query() query: ListHostelsQueryDto, @CurrentUser() user: any) {
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const result = await this.hostelsService.findMany(query, scope);
     return { success: true, ...result };
   }
 
@@ -57,8 +63,9 @@ export class HostelsController {
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN')
   @ApiOperation({ summary: 'Get hostel statistics' })
   @ApiResponse({ status: 200, description: 'Hostel stats' })
-  async getStats() {
-    const stats = await this.hostelsService.getStats();
+  async getStats(@CurrentUser() user: any) {
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const stats = await this.hostelsService.getStats(scope);
     return { success: true, data: stats };
   }
 
@@ -67,8 +74,9 @@ export class HostelsController {
   @ApiOperation({ summary: 'Get hostel by ID' })
   @ApiResponse({ status: 200, description: 'Hostel details' })
   @ApiResponse({ status: 404, description: 'Hostel not found' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    const hostel = await this.hostelsService.findById(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const hostel = await this.hostelsService.findById(id, scope);
     return { success: true, data: hostel };
   }
 

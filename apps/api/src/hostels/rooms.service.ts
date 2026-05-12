@@ -12,6 +12,7 @@ import {
   ListRoomsQueryDto,
   BulkCreateRoomsDto,
 } from './dto';
+import { HostelScope } from '../auth/access-scope.service';
 
 @Injectable()
 export class RoomsService {
@@ -118,7 +119,7 @@ export class RoomsService {
     };
   }
 
-  async findById(id: string) {
+  async findById(id: string, scope: HostelScope = 'ALL') {
     const room = await this.prisma.room.findUnique({
       where: { id },
       include: {
@@ -142,14 +143,26 @@ export class RoomsService {
     });
 
     if (!room) throw new NotFoundException('Room not found');
+    if (scope !== 'ALL' && !scope.includes(room.hostel.id)) {
+      throw new NotFoundException('Room not found');
+    }
     return this.mapRoomResponse(room);
   }
 
-  async findMany(query: ListRoomsQueryDto) {
+  async findMany(query: ListRoomsQueryDto, scope: HostelScope = 'ALL') {
     const { page = 1, limit = 50, hostelId, floor, block, status, type } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.RoomWhereInput = { hostelId };
+    const where: Prisma.RoomWhereInput = {};
+
+    if (scope !== 'ALL') {
+      if (hostelId && !scope.includes(hostelId)) {
+        throw new NotFoundException('Rooms not found');
+      }
+      where.hostelId = hostelId || { in: scope };
+    } else if (hostelId) {
+      where.hostelId = hostelId;
+    }
 
     if (floor !== undefined) where.floor = floor;
     if (block) where.block = block;
