@@ -56,6 +56,7 @@ export default function UsersPage() {
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: 20, totalPages: 1 });
 
   const [search, setSearch] = useState('');
@@ -70,15 +71,22 @@ export default function UsersPage() {
   });
   const [creating, setCreating] = useState(false);
 
+  const buildUsersParams = useCallback((page?: number) => {
+    const params = new URLSearchParams();
+    if (page) {
+      params.set('page', String(page));
+      params.set('limit', '20');
+    }
+    if (search) params.set('search', search);
+    if (statusFilter) params.set('status', statusFilter);
+    if (roleFilter) params.set('role', roleFilter);
+    return params;
+  }, [search, statusFilter, roleFilter]);
+
   const fetchUsers = useCallback(async (page = 1) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.set('page', String(page));
-      params.set('limit', '20');
-      if (search) params.set('search', search);
-      if (statusFilter) params.set('status', statusFilter);
-      if (roleFilter) params.set('role', roleFilter);
+      const params = buildUsersParams(page);
 
       const res = await api.get<UsersResponse>(`/users?${params.toString()}`);
       setUsers(res.data);
@@ -88,7 +96,7 @@ export default function UsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter, roleFilter, addToast]);
+  }, [buildUsersParams, addToast]);
 
   useEffect(() => {
     const timer = setTimeout(() => fetchUsers(1), 300);
@@ -108,6 +116,26 @@ export default function UsersPage() {
       addToast({ type: 'error', title: message });
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params = buildUsersParams();
+      const query = params.toString();
+      const blob = await api.download(`/users/export${query ? `?${query}` : ''}`);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `users-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      addToast({ type: 'success', title: 'Users export downloaded' });
+    } catch {
+      addToast({ type: 'error', title: 'Failed to export users' });
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -210,7 +238,7 @@ export default function UsersPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={handleExport} loading={exporting}>
               <Download className="w-4 h-4 mr-1" />
               Export
             </Button>

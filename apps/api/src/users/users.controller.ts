@@ -10,6 +10,7 @@ import {
   UseGuards,
   UseInterceptors,
   ParseUUIDPipe,
+  Header,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import {
@@ -57,6 +58,16 @@ export class UsersController {
   async findAll(@Query() query: ListUsersQueryDto) {
     const result = await this.usersService.findMany(query);
     return { success: true, ...result };
+  }
+
+  @Get('export')
+  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="users-export.csv"')
+  @ApiOperation({ summary: 'Export users as CSV with filters' })
+  @ApiResponse({ status: 200, description: 'Users CSV export' })
+  async export(@Query() query: ListUsersQueryDto) {
+    return this.usersService.exportCsv(query);
   }
 
   @Get(':id')

@@ -96,30 +96,7 @@ export class UsersService {
     const { page = 1, limit = 20, search, status, role } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.UserWhereInput = {};
-
-    if (search) {
-      where.OR = [
-        { email: { contains: search, mode: 'insensitive' } },
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { usn: { contains: search, mode: 'insensitive' } },
-        { mobile: { contains: search } },
-      ];
-    }
-
-    if (status) {
-      where.status = status as UserStatus;
-    }
-
-    if (role) {
-      where.userRoles = {
-        some: {
-          revokedAt: null,
-          role: { name: role },
-        },
-      };
-    }
+    const where = this.buildUserWhere({ search, status, role });
 
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -146,6 +123,50 @@ export class UsersService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  async exportCsv(query: ListUsersQueryDto) {
+    const where = this.buildUserWhere(query);
+    const users = await this.prisma.user.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        userRoles: {
+          where: { revokedAt: null },
+          include: { role: true },
+        },
+      },
+    });
+
+    const header = [
+      'ID',
+      'First Name',
+      'Last Name',
+      'Email',
+      'Mobile',
+      'USN',
+      'Status',
+      'Roles',
+      'Created At',
+      'Updated At',
+    ];
+
+    const rows = users.map((user) => [
+      user.id,
+      user.firstName,
+      user.lastName,
+      user.email,
+      user.mobile ?? '',
+      user.usn ?? '',
+      user.status,
+      user.userRoles.map((ur) => ur.role.displayName).join('; '),
+      user.createdAt.toISOString(),
+      user.updatedAt.toISOString(),
+    ]);
+
+    return [header, ...rows]
+      .map((row) => row.map((value) => this.escapeCsvValue(value)).join(','))
+      .join('\n');
   }
 
   async update(id: string, dto: UpdateUserDto) {
@@ -179,6 +200,41 @@ export class UsersService {
     });
 
     return { message: 'User deactivated' };
+  }
+
+  private buildUserWhere(query: Pick<ListUsersQueryDto, 'search' | 'status' | 'role'>) {
+    const { search, status, role } = query;
+    const where: Prisma.UserWhereInput = {};
+
+    if (search) {
+      where.OR = [
+        { email: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { usn: { contains: search, mode: 'insensitive' } },
+        { mobile: { contains: search } },
+      ];
+    }
+
+    if (status) {
+      where.status = status as UserStatus;
+    }
+
+    if (role) {
+      where.userRoles = {
+        some: {
+          revokedAt: null,
+          role: { name: role },
+        },
+      };
+    }
+
+    return where;
+  }
+
+  private escapeCsvValue(value: string) {
+    const escaped = value.replace(/"/g, '""');
+    return /[",\n\r]/.test(escaped) ? `"${escaped}"` : escaped;
   }
 
   private mapUserResponse(user: {

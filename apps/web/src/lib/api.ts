@@ -112,6 +112,58 @@ class ApiClient {
     return this.request<T>(endpoint, { ...options, method: 'DELETE' });
   }
 
+  async download(endpoint: string, options: Omit<RequestOptions, 'method' | 'body'> = {}): Promise<Blob> {
+    const { headers = {}, noAuth = false } = options;
+    const requestHeaders: Record<string, string> = { ...headers };
+
+    if (!noAuth) {
+      const token = this.getToken();
+      if (token) {
+        requestHeaders['Authorization'] = `Bearer ${token}`;
+      }
+    }
+
+    let res = await fetch(`${this.baseUrl}/api/v1${endpoint}`, {
+      method: 'GET',
+      headers: requestHeaders,
+    });
+
+    if (res.status === 401 && !noAuth) {
+      const refreshed = await this.refreshToken();
+      if (refreshed) {
+        const newToken = this.getToken();
+        if (newToken) {
+          requestHeaders['Authorization'] = `Bearer ${newToken}`;
+        }
+        res = await fetch(`${this.baseUrl}/api/v1${endpoint}`, {
+          method: 'GET',
+          headers: requestHeaders,
+        });
+      } else {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+        throw new Error('Session expired');
+      }
+    }
+
+    if (!res.ok) {
+      let message = 'Download failed';
+      try {
+        const data = await res.json();
+        message = data.message || message;
+        throw new ApiError(message, res.status, data);
+      } catch (err) {
+        if (err instanceof ApiError) throw err;
+        throw new ApiError(message, res.status);
+      }
+    }
+
+    return res.blob();
+  }
+
   async upload<T = unknown>(endpoint: string, file: File, fieldName = 'file'): Promise<T> {
     const formData = new FormData();
     formData.append(fieldName, file);
