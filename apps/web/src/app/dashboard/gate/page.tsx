@@ -15,6 +15,7 @@ import { StatCardSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
 import { useToast } from '@/components/ui/toast';
+import { SearchPicker, type SearchPickerOption } from '@/components/ui/search-picker';
 import {
   ScanLine, Plus, Search, ArrowDownToLine, ArrowUpFromLine, Clock, AlertTriangle, ShieldCheck, Ticket,
 } from 'lucide-react';
@@ -61,6 +62,21 @@ export default function GatePage() {
   const canApprovePass = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN');
   const canCreatePass = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT');
 
+  const searchStudents = useCallback(async (term: string): Promise<SearchPickerOption[]> => {
+    try {
+      const res = await api.get<{ data: { id: string; firstName: string; lastName: string; usn: string | null; email: string }[] }>(
+        `/users?search=${encodeURIComponent(term)}&role=STUDENT&limit=10`,
+      );
+      return (res.data || []).map((student) => ({
+        value: student.id,
+        label: `${student.firstName} ${student.lastName}`,
+        sublabel: [student.usn, student.email].filter(Boolean).join(' - '),
+      }));
+    } catch {
+      return [];
+    }
+  }, []);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -94,6 +110,10 @@ export default function GatePage() {
 
   const handleCreateEntry = async () => {
     try {
+      if (!entryForm.studentId) {
+        addToast({ type: 'error', title: 'Select a student before logging entry' });
+        return;
+      }
       const payload: any = { studentId: entryForm.studentId, type: entryForm.type, gateNo: entryForm.gateNo };
       if (entryForm.linkedLeaveId) payload.linkedLeaveId = entryForm.linkedLeaveId;
       if (entryForm.notes) payload.notes = entryForm.notes;
@@ -109,6 +129,10 @@ export default function GatePage() {
 
   const handleCreatePass = async () => {
     try {
+      if (!isStudent && !passForm.studentId) {
+        addToast({ type: 'error', title: 'Select a student before issuing gate pass' });
+        return;
+      }
       const payload: any = {
         purpose: passForm.purpose,
         validFrom: passForm.outDate && passForm.outTime ? new Date(`${passForm.outDate}T${passForm.outTime}`).toISOString() : '',
@@ -313,7 +337,15 @@ export default function GatePage() {
       {/* Create Entry Modal */}
       <Modal open={showCreateEntry} onClose={() => setShowCreateEntry(false)} title="Log Gate Entry/Exit" size="lg">
         <div className="space-y-4">
-          <Input placeholder="Student User ID" value={entryForm.studentId} onChange={(e) => setEntryForm({ ...entryForm, studentId: e.target.value })} />
+          <SearchPicker
+            label="Student"
+            placeholder="Search by name, USN, or email..."
+            value={entryForm.studentId}
+            onChange={(value) => setEntryForm({ ...entryForm, studentId: value })}
+            onSearch={searchStudents}
+            required
+            emptyMessage="No students found"
+          />
           <div className="grid grid-cols-2 gap-3">
             <select value={entryForm.type} onChange={(e) => setEntryForm({ ...entryForm, type: e.target.value })} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
               <option value="IN">Entry (IN)</option>
@@ -330,7 +362,17 @@ export default function GatePage() {
       {/* Create Pass Modal */}
       <Modal open={showCreatePass} onClose={() => setShowCreatePass(false)} title={isStudent ? 'Request Gate Pass' : 'Issue Gate Pass'} size="lg">
         <div className="space-y-4">
-          {!isStudent && <Input placeholder="Student User ID" value={passForm.studentId} onChange={(e) => setPassForm({ ...passForm, studentId: e.target.value })} />}
+          {!isStudent && (
+            <SearchPicker
+              label="Student"
+              placeholder="Search by name, USN, or email..."
+              value={passForm.studentId}
+              onChange={(value) => setPassForm({ ...passForm, studentId: value })}
+              onSearch={searchStudents}
+              required
+              emptyMessage="No students found"
+            />
+          )}
           <Input placeholder="Purpose (e.g., Medical visit, Library, Shopping)" value={passForm.purpose} onChange={(e) => setPassForm({ ...passForm, purpose: e.target.value })} />
           <div className="grid grid-cols-2 gap-3">
             <Input placeholder="Visitor Name (optional)" value={passForm.visitorName} onChange={(e) => setPassForm({ ...passForm, visitorName: e.target.value })} />
