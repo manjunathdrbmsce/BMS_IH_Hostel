@@ -248,6 +248,7 @@ export class UsersService {
     createdAt: Date;
     updatedAt: Date;
     userRoles: Array<{
+      id: string;
       hostelId?: string | null;
       role: { name: string; displayName: string };
       hostel?: {
@@ -267,6 +268,7 @@ export class UsersService {
       lastName: user.lastName,
       status: user.status,
       roles: user.userRoles.map((ur) => ({
+        id: ur.id,
         name: ur.role.name,
         displayName: ur.role.displayName,
         hostelId: ur.hostelId ?? null,
