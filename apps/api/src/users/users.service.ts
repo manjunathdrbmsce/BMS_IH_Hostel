@@ -179,6 +179,7 @@ export class UsersService {
     if (dto.usn !== undefined) data.usn = dto.usn?.trim() || null;
     if (dto.firstName) data.firstName = dto.firstName.trim();
     if (dto.lastName) data.lastName = dto.lastName.trim();
+    if (dto.status !== undefined) data.status = dto.status;
     if (dto.password) {
       data.passwordHash = await bcrypt.hash(dto.password, this.SALT_ROUNDS);
     }

@@ -10,6 +10,7 @@ import {
   IsArray,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { UserStatus } from '@prisma/client';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'john@example.com' })
@@ -62,7 +63,12 @@ export class CreateUserDto {
   roles?: string[];
 }
 
-export class UpdateUserDto extends PartialType(CreateUserDto) {}
+export class UpdateUserDto extends PartialType(CreateUserDto) {
+  @ApiPropertyOptional({ enum: UserStatus })
+  @IsOptional()
+  @IsEnum(UserStatus)
+  status?: UserStatus;
+}
 
 export class ListUsersQueryDto {
   @ApiPropertyOptional({ default: 1 })

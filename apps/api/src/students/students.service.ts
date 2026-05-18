@@ -231,6 +231,59 @@ export class StudentsService {
     };
   }
 
+  async getStats(scope: HostelScope = 'ALL') {
+    const where = this.buildScopedProfileWhere(scope);
+
+    const [totalProfiles, departmentGroups, withBed] = await Promise.all([
+      this.prisma.studentProfile.count({ where }),
+      this.prisma.studentProfile.groupBy({
+        by: ['department'],
+        where: {
+          ...where,
+          department: { not: null },
+        },
+        _count: { department: true },
+        orderBy: { department: 'asc' },
+      }),
+      this.prisma.studentProfile.count({
+        where: {
+          ...where,
+          user: {
+            ...(where.user as Prisma.UserWhereInput),
+            bedAssignments: {
+              some: {
+                status: 'ACTIVE',
+                ...(scope !== 'ALL'
+                  ? {
+                      bed: {
+                        room: {
+                          hostelId: { in: scope },
+                        },
+                      },
+                    }
+                  : {}),
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const departments = departmentGroups
+      .filter((group) => group.department)
+      .map((group) => ({
+        name: group.department!,
+        count: group._count.department,
+      }));
+
+    return {
+      totalProfiles,
+      departmentCount: departments.length,
+      departments,
+      withBed,
+    };
+  }
+
   async updateProfile(userId: string, dto: UpdateStudentProfileDto) {
     this.validateYearSemester(dto.year, dto.semester);
 
@@ -274,6 +327,27 @@ export class StudentsService {
         `Invalid academic year/semester combination. Year ${year} allows only semesters ${validSemesters?.join(' and ') || 'none'}.`,
       );
     }
+  }
+
+  private buildScopedProfileWhere(scope: HostelScope): Prisma.StudentProfileWhereInput {
+    if (scope === 'ALL') {
+      return {};
+    }
+
+    return {
+      user: {
+        bedAssignments: {
+          some: {
+            status: 'ACTIVE',
+            bed: {
+              room: {
+                hostelId: { in: scope },
+              },
+            },
+          },
+        },
+      },
+    };
   }
 
   // -----------------------------------------------------------------------

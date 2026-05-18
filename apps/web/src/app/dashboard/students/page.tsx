@@ -67,6 +67,13 @@ interface StudentProfile {
   currentAssignment?: any;
 }
 
+interface StudentStats {
+  totalProfiles: number;
+  departmentCount: number;
+  departments: Array<{ name: string; count: number }>;
+  withBed: number;
+}
+
 export default function StudentsPage() {
   const router = useRouter();
   const { hasRole } = useAuth();
@@ -87,6 +94,7 @@ export default function StudentsPage() {
   }, []);
 
   const [students, setStudents] = useState<StudentProfile[]>([]);
+  const [stats, setStats] = useState<StudentStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: 20, totalPages: 1 });
 
@@ -109,6 +117,15 @@ export default function StudentsPage() {
         ...(SEMESTERS_BY_YEAR[form.year] || []).map((semester) => ({ value: semester, label: semester })),
       ]
     : [{ value: '', label: 'Select year first' }];
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await api.get<{ success: boolean; data: StudentStats }>('/students/profiles/stats');
+      setStats(res.data);
+    } catch {
+      setStats(null);
+    }
+  }, []);
 
   const fetchStudents = useCallback(async (page = 1) => {
     setLoading(true);
@@ -136,6 +153,8 @@ export default function StudentsPage() {
     const timer = setTimeout(() => fetchStudents(1), 300);
     return () => clearTimeout(timer);
   }, [fetchStudents]);
+
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
   const handleCreate = async () => {
     if (!form.userId) {
@@ -174,6 +193,7 @@ export default function StudentsPage() {
       setShowCreateModal(false);
       setForm({ userId: '', dateOfBirth: '', bloodGroup: '', gender: '', department: '', course: '', year: '', semester: '', admissionDate: '', emergencyContact: '', permanentAddress: '', medicalConditions: '' });
       fetchStudents(1);
+      fetchStats();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to create profile';
       addToast({ type: 'error', title: msg });
@@ -204,9 +224,9 @@ export default function StudentsPage() {
       <div className="p-6 space-y-6 animate-in">
         {/* Stats Row */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <StatCard title="Total Profiles" value={meta.total} icon={GraduationCap} iconColor="text-indigo-600" iconBg="bg-indigo-50" />
-          <StatCard title="Departments" value="—" subtitle="Across all programs" icon={Users} iconColor="text-emerald-600" iconBg="bg-emerald-50" />
-          <StatCard title="With Bed" value="—" subtitle="Currently assigned" icon={BedDouble} iconColor="text-blue-600" iconBg="bg-blue-50" />
+          <StatCard title="Total Profiles" value={stats?.totalProfiles ?? meta.total} icon={GraduationCap} iconColor="text-indigo-600" iconBg="bg-indigo-50" />
+          <StatCard title="Departments" value={stats?.departmentCount ?? '-'} subtitle="Across all programs" icon={Users} iconColor="text-emerald-600" iconBg="bg-emerald-50" />
+          <StatCard title="With Bed" value={stats?.withBed ?? '-'} subtitle="Currently assigned" icon={BedDouble} iconColor="text-blue-600" iconBg="bg-blue-50" />
         </div>
 
         {/* Toolbar */}
@@ -219,8 +239,14 @@ export default function StudentsPage() {
                 className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
               />
             </div>
-            <Input placeholder="Department" value={departmentFilter}
-              onChange={(e) => setDepartmentFilter(e.target.value)} className="max-w-[160px]" />
+            <Select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value)}
+              options={[
+                { value: '', label: 'All Departments' },
+                ...(stats?.departments || []).map((department) => ({
+                  value: department.name,
+                  label: `${department.name} (${department.count})`,
+                })),
+              ]} />
             <Select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}
               options={[
                 { value: '', label: 'All Years' },

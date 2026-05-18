@@ -69,6 +69,16 @@ export class StudentsController {
     return { success: true, ...result };
   }
 
+  @Get('profiles/stats')
+  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN')
+  @ApiOperation({ summary: 'Get student profile stats' })
+  @ApiResponse({ status: 200, description: 'Student profile stats' })
+  async getProfileStats(@CurrentUser() user: any) {
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const stats = await this.studentsService.getStats(scope);
+    return { success: true, data: stats };
+  }
+
   @Get('profiles/:userId')
   @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'STUDENT')
   @ApiOperation({ summary: 'Get student profile by user ID' })
