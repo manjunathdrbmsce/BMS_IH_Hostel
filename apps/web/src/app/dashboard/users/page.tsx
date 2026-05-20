@@ -30,6 +30,9 @@ import {
   Users as UsersIcon,
 } from 'lucide-react';
 
+const SUPER_ADMIN_PERMISSION_STORAGE_KEY = 'bms.super-admin.roles-responsibilities.v1';
+const SUPER_ADMIN_PERMISSION_CHANGE_EVENT = 'super-admin-permissions-change';
+
 interface User {
   id: string;
   email: string;
@@ -50,9 +53,14 @@ interface UsersResponse {
 
 export default function UsersPage() {
   const router = useRouter();
-  const { hasRole } = useAuth();
+  const { user, hasRole } = useAuth();
   const { addToast } = useToast();
   const canWrite = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN');
+  const isSuperAdmin = hasRole('SUPER_ADMIN');
+  const [superAdminPermissions, setSuperAdminPermissions] = useState<Record<string, boolean>>({});
+  const storedExportState = superAdminPermissions.USER_EXPORT;
+  const canExport = !isSuperAdmin
+    || (storedExportState !== undefined ? storedExportState : user?.permissions?.includes('USER_EXPORT'));
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,6 +111,26 @@ export default function UsersPage() {
     return () => clearTimeout(timer);
   }, [fetchUsers]);
 
+  useEffect(() => {
+    const loadPermissions = () => {
+      try {
+        const stored = localStorage.getItem(SUPER_ADMIN_PERMISSION_STORAGE_KEY);
+        setSuperAdminPermissions(stored ? JSON.parse(stored) : {});
+      } catch {
+        setSuperAdminPermissions({});
+      }
+    };
+
+    loadPermissions();
+    window.addEventListener(SUPER_ADMIN_PERMISSION_CHANGE_EVENT, loadPermissions);
+    window.addEventListener('storage', loadPermissions);
+
+    return () => {
+      window.removeEventListener(SUPER_ADMIN_PERMISSION_CHANGE_EVENT, loadPermissions);
+      window.removeEventListener('storage', loadPermissions);
+    };
+  }, []);
+
   const handleCreate = async () => {
     setCreating(true);
     try {
@@ -120,6 +148,11 @@ export default function UsersPage() {
   };
 
   const handleExport = async () => {
+    if (!canExport) {
+      addToast({ type: 'error', title: 'User export is disabled for Super Admin' });
+      return;
+    }
+
     setExporting(true);
     try {
       const params = buildUsersParams();
@@ -238,7 +271,7 @@ export default function UsersPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleExport} loading={exporting}>
+            <Button variant="outline" size="sm" onClick={handleExport} loading={exporting} disabled={!canExport}>
               <Download className="w-4 h-4 mr-1" />
               Export
             </Button>

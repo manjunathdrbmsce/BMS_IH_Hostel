@@ -29,7 +29,28 @@ import {
   Shield,
   UtensilsCrossed,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+
+const SUPER_ADMIN_PERMISSION_STORAGE_KEY = 'bms.super-admin.roles-responsibilities.v1';
+const SUPER_ADMIN_PERMISSION_CHANGE_EVENT = 'super-admin-permissions-change';
+
+const superAdminNavPermissions: Record<string, string[]> = {
+  '/dashboard': ['DASHBOARD_VIEW_GLOBAL'],
+  '/dashboard/users': ['USER_CREATE', 'USER_EXPORT', 'ROLE_ASSIGN'],
+  '/dashboard/buildings': ['BUILDING_MANAGE'],
+  '/dashboard/hostels': ['HOSTEL_MANAGE', 'WARDEN_ASSIGN'],
+  '/dashboard/rooms': ['ROOM_MANAGE'],
+  '/dashboard/policies': ['POLICY_MANAGE'],
+  '/dashboard/students': ['STUDENT_PROFILE_MANAGE'],
+  '/dashboard/allotments': ['ALLOTMENT_MANAGE'],
+  '/dashboard/registration': ['REGISTRATION_VIEW', 'REGISTRATION_DRAFT_EDIT'],
+  '/dashboard/leave': ['LEAVE_STATS_VIEW', 'LEAVE_ADMIN_DECIDE', 'LEAVE_PARENT_OVERRIDE'],
+  '/dashboard/gate': ['GATE_MANAGE'],
+  '/dashboard/attendance': ['ATTENDANCE_STATS_VIEW', 'ROLL_CALL_CREATE', 'ROLL_CALL_MANAGE'],
+  '/dashboard/violations': ['VIOLATION_MANAGE'],
+  '/dashboard/complaints': ['COMPLAINT_MANAGE', 'COMPLAINT_CREATE_ON_BEHALF'],
+  '/dashboard/notices': ['NOTICE_MANAGE'],
+};
 
 const iconMap: Record<string, React.ElementType> = {
   LayoutDashboard,
@@ -49,6 +70,7 @@ const iconMap: Record<string, React.ElementType> = {
   Bell,
   ScrollText,
   Settings,
+  Shield,
   UtensilsCrossed,
 };
 
@@ -56,12 +78,51 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user, logout, hasRole } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const [superAdminPermissions, setSuperAdminPermissions] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const loadPermissions = () => {
+      try {
+        const stored = localStorage.getItem(SUPER_ADMIN_PERMISSION_STORAGE_KEY);
+        setSuperAdminPermissions(stored ? JSON.parse(stored) : {});
+      } catch {
+        setSuperAdminPermissions({});
+      }
+    };
+
+    loadPermissions();
+    window.addEventListener(SUPER_ADMIN_PERMISSION_CHANGE_EVENT, loadPermissions);
+    window.addEventListener('storage', loadPermissions);
+
+    return () => {
+      window.removeEventListener(SUPER_ADMIN_PERMISSION_CHANGE_EVENT, loadPermissions);
+      window.removeEventListener('storage', loadPermissions);
+    };
+  }, []);
+
+  const isSuperAdmin = hasRole('SUPER_ADMIN');
+
+  const isSuperAdminFeatureVisible = (href: string) => {
+    if (!isSuperAdmin) return true;
+    if (href === '/dashboard/roles-responsibilities' || href === '/dashboard/settings') return true;
+
+    const permissionKeys = superAdminNavPermissions[href];
+    if (!permissionKeys) return true;
+
+    return permissionKeys.some((key) => {
+      if (superAdminPermissions[key] !== undefined) {
+        return superAdminPermissions[key] !== false;
+      }
+
+      return user?.permissions?.includes(key) ?? true;
+    });
+  };
 
   // Filter sections: only show sections that have at least one visible item
   const visibleSections: NavSection[] = NAV_SECTIONS
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => hasRole(...item.roles)),
+      items: section.items.filter((item) => hasRole(...item.roles) && isSuperAdminFeatureVisible(item.href)),
     }))
     .filter((section) => section.items.length > 0);
 

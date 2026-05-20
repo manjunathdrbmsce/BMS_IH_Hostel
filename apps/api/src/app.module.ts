@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -24,6 +24,7 @@ import { UploadsModule } from './uploads/uploads.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { MessModule } from './mess/mess.module';
+import { SuperAdminPermissionEnforcementInterceptor } from './auth/super-admin-permission-enforcement.interceptor';
 
 @Module({
   imports: [
@@ -75,6 +76,10 @@ import { MessModule } from './mess/mess.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: SuperAdminPermissionEnforcementInterceptor,
     },
   ],
 })

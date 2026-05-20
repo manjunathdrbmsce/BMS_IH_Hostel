@@ -94,7 +94,7 @@ export class RolesController {
     async assignRole(
         @Param('userId', ParseUUIDPipe) userId: string,
         @Body() dto: AssignRoleDto,
-        @CurrentUser('id') grantedBy: string,
+        @CurrentUser() currentUser: any,
     ) {
         // Verify user exists
         const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -113,6 +113,11 @@ export class RolesController {
         if (!role) {
             throw new NotFoundException(`Role "${dto.roleName}" not found`);
         }
+
+        this.enforceSuperAdminPermission(
+            currentUser,
+            role.name === 'WARDEN' && dto.hostelId ? 'WARDEN_ASSIGN' : 'ROLE_ASSIGN',
+        );
 
         if (this.hostelScopedRoles.has(role.name) && !dto.hostelId) {
             throw new BadRequestException(`hostelId is required when assigning "${role.name}"`);
@@ -185,7 +190,7 @@ export class RolesController {
                 userId,
                 roleId: role.id,
                 hostelId: dto.hostelId || null,
-                grantedBy,
+                grantedBy: currentUser.id,
             },
             include: { role: true, hostel: true },
         });
@@ -222,6 +227,7 @@ export class RolesController {
     async revokeRole(
         @Param('userId', ParseUUIDPipe) userId: string,
         @Param('roleAssignmentId', ParseUUIDPipe) roleAssignmentId: string,
+        @CurrentUser() currentUser: any,
     ) {
         const assignment = await this.prisma.userRole.findFirst({
             where: { id: roleAssignmentId, userId, revokedAt: null },
@@ -231,6 +237,11 @@ export class RolesController {
         if (!assignment) {
             throw new ForbiddenException('Role assignment not found or already revoked');
         }
+
+        this.enforceSuperAdminPermission(
+            currentUser,
+            assignment.role.name === 'WARDEN' && assignment.hostelId ? 'WARDEN_ASSIGN' : 'ROLE_ASSIGN',
+        );
 
         // Safety: prevent removing the last SUPER_ADMIN
         if (assignment.role.name === 'SUPER_ADMIN') {
@@ -257,5 +268,15 @@ export class RolesController {
             success: true,
             message: `Role "${assignment.role.name}" revoked from user`,
         };
+    }
+
+    private enforceSuperAdminPermission(user: any, permission: string) {
+        if (!user?.roles?.includes('SUPER_ADMIN')) {
+            return;
+        }
+
+        if (!user.permissions?.includes(permission)) {
+            throw new ForbiddenException(`SUPER_ADMIN permission disabled: ${permission}`);
+        }
     }
 }
