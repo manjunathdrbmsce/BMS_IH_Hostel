@@ -45,7 +45,34 @@ const SUPER_ADMIN_PERMISSION_DEFINITIONS = [
   { name: 'NOTICE_MANAGE', module: 'notices', description: 'Publish and deactivate notices', defaultEnabled: true },
 ] as const;
 
-class UpdateSuperAdminPermissionDto {
+const HOSTEL_ADMIN_PERMISSION_DEFINITIONS = [
+  { name: 'USER_CREATE', module: 'users', description: 'Create users for hostel operations', defaultEnabled: true },
+  { name: 'USER_READ', module: 'users', description: 'View user details', defaultEnabled: true },
+  { name: 'USER_UPDATE', module: 'users', description: 'Update user details', defaultEnabled: true },
+  { name: 'USER_LIST', module: 'users', description: 'List users', defaultEnabled: true },
+  { name: 'ROLE_ASSIGN', module: 'roles', description: 'Assign roles to users', defaultEnabled: true },
+  { name: 'ROLE_REVOKE', module: 'roles', description: 'Revoke roles from users', defaultEnabled: true },
+  { name: 'HOSTEL_MANAGE', module: 'hostels', description: 'Manage hostels and hostel dashboard stats', defaultEnabled: true },
+  { name: 'ROOM_MANAGE', module: 'rooms', description: 'Manage rooms, beds, and room status', defaultEnabled: true },
+  { name: 'ALLOTMENT_MANAGE', module: 'allotments', description: 'Assign, transfer, and vacate student beds', defaultEnabled: true },
+  { name: 'FINANCE_MANAGE', module: 'finance', description: 'Manage hostel finance workflows', defaultEnabled: true },
+  { name: 'PAYMENT_VIEW', module: 'finance', description: 'View student payment records', defaultEnabled: true },
+  { name: 'LEAVE_APPROVE', module: 'leave', description: 'Approve or reject leave requests', defaultEnabled: true },
+  { name: 'MESS_MANAGE', module: 'mess', description: 'Manage mess operations', defaultEnabled: true },
+  { name: 'COMPLAINT_MANAGE', module: 'complaints', description: 'View, update, and resolve complaints', defaultEnabled: true },
+  { name: 'NOTICE_PUBLISH', module: 'notices', description: 'Publish hostel notices', defaultEnabled: true },
+  { name: 'REPORT_VIEW', module: 'reports', description: 'View reports and dashboard analytics', defaultEnabled: true },
+  { name: 'AUDIT_VIEW', module: 'audit', description: 'View audit logs', defaultEnabled: true },
+] as const;
+
+const ROLE_PERMISSION_DEFINITIONS = {
+  SUPER_ADMIN: SUPER_ADMIN_PERMISSION_DEFINITIONS,
+  HOSTEL_ADMIN: HOSTEL_ADMIN_PERMISSION_DEFINITIONS,
+} as const;
+
+type ConfigurableRole = keyof typeof ROLE_PERMISSION_DEFINITIONS;
+
+class UpdateRolePermissionDto {
   @IsString()
   permission!: string;
 
@@ -54,18 +81,46 @@ class UpdateSuperAdminPermissionDto {
 }
 
 @ApiTags('roles-responsibilities')
-@Controller('roles-responsibilities/super-admin')
+@Controller('roles-responsibilities')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth('access-token')
 export class SuperAdminPermissionsController {
   constructor(private readonly prisma: PrismaService) {}
 
-  @Get()
+  @Get('super-admin')
   @Roles('SUPER_ADMIN')
   @ApiOperation({ summary: 'Get Super Admin feature permissions' })
   @ApiResponse({ status: 200, description: 'Super Admin permissions returned' })
-  async getPermissions() {
-    const { role, permissions } = await this.ensureSuperAdminPermissions();
+  async getSuperAdminPermissions() {
+    return this.getPermissionsForRole('SUPER_ADMIN');
+  }
+
+  @Patch('super-admin')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Enable or disable one Super Admin permission' })
+  @ApiResponse({ status: 200, description: 'Super Admin permission updated' })
+  async updateSuperAdminPermission(@Body() dto: UpdateRolePermissionDto) {
+    return this.updatePermissionForRole('SUPER_ADMIN', dto);
+  }
+
+  @Get('hostel-admin')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Get Hostel Admin feature permissions' })
+  @ApiResponse({ status: 200, description: 'Hostel Admin permissions returned' })
+  async getHostelAdminPermissions() {
+    return this.getPermissionsForRole('HOSTEL_ADMIN');
+  }
+
+  @Patch('hostel-admin')
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({ summary: 'Enable or disable one Hostel Admin permission' })
+  @ApiResponse({ status: 200, description: 'Hostel Admin permission updated' })
+  async updateHostelAdminPermission(@Body() dto: UpdateRolePermissionDto) {
+    return this.updatePermissionForRole('HOSTEL_ADMIN', dto);
+  }
+
+  private async getPermissionsForRole(roleName: ConfigurableRole) {
+    const { role, permissions } = await this.ensureRolePermissions(roleName);
     const enabled = new Set(
       role.rolePermissions.map((rolePermission) => rolePermission.permission.name),
     );
@@ -79,27 +134,24 @@ export class SuperAdminPermissionsController {
     };
   }
 
-  @Patch()
-  @Roles('SUPER_ADMIN')
-  @ApiOperation({ summary: 'Enable or disable one Super Admin permission' })
-  @ApiResponse({ status: 200, description: 'Super Admin permission updated' })
-  async updatePermission(@Body() dto: UpdateSuperAdminPermissionDto) {
-    const definition = SUPER_ADMIN_PERMISSION_DEFINITIONS.find(
+  private async updatePermissionForRole(roleName: ConfigurableRole, dto: UpdateRolePermissionDto) {
+    const definitions = ROLE_PERMISSION_DEFINITIONS[roleName];
+    const definition = definitions.find(
       (item) => item.name === dto.permission,
     );
 
     if (!definition) {
       return {
         success: false,
-        message: 'Unknown Super Admin permission',
+        message: `Unknown ${this.roleLabel(roleName)} permission`,
       };
     }
 
-    const { role, permissionMap } = await this.ensureSuperAdminPermissions();
+    const { role, permissionMap } = await this.ensureRolePermissions(roleName);
     const permissionId = permissionMap.get(dto.permission)!;
 
     if ('locked' in definition && definition.locked) {
-      return this.getPermissions();
+      return this.getPermissionsForRole(roleName);
     }
 
     if (dto.enabled) {
@@ -114,12 +166,13 @@ export class SuperAdminPermissionsController {
       });
     }
 
-    return this.getPermissions();
+    return this.getPermissionsForRole(roleName);
   }
 
-  private async ensureSuperAdminPermissions() {
+  private async ensureRolePermissions(roleName: ConfigurableRole) {
+    const definitions = ROLE_PERMISSION_DEFINITIONS[roleName];
     const role = await this.prisma.role.findUnique({
-      where: { name: 'SUPER_ADMIN' },
+      where: { name: roleName },
       include: {
         rolePermissions: {
           include: { permission: true },
@@ -128,12 +181,12 @@ export class SuperAdminPermissionsController {
     });
 
     if (!role) {
-      throw new Error('SUPER_ADMIN role not found');
+      throw new Error(`${roleName} role not found`);
     }
 
     const permissionMap = new Map<string, string>();
 
-    for (const definition of SUPER_ADMIN_PERMISSION_DEFINITIONS) {
+    for (const definition of definitions) {
       const existingPermission = await this.prisma.permission.findUnique({
         where: { name: definition.name },
         select: { id: true },
@@ -170,7 +223,7 @@ export class SuperAdminPermissionsController {
     }
 
     const refreshedRole = await this.prisma.role.findUniqueOrThrow({
-      where: { name: 'SUPER_ADMIN' },
+      where: { name: roleName },
       include: {
         rolePermissions: {
           include: { permission: true },
@@ -181,7 +234,11 @@ export class SuperAdminPermissionsController {
     return {
       role: refreshedRole,
       permissionMap,
-      permissions: SUPER_ADMIN_PERMISSION_DEFINITIONS,
+      permissions: definitions,
     };
+  }
+
+  private roleLabel(roleName: ConfigurableRole) {
+    return roleName === 'SUPER_ADMIN' ? 'Super Admin' : 'Hostel Admin';
   }
 }

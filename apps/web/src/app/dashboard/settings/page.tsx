@@ -111,7 +111,7 @@ export default function SettingsPage() {
               <div className="flex flex-wrap justify-center gap-1 mt-3">
                 {user.roles.map((r) => (
                   <span
-                    key={r.name}
+                    key={roleAssignmentKey(r)}
                     className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${roleColor(r.name)}`}
                   >
                     {r.displayName}
@@ -192,7 +192,7 @@ export default function SettingsPage() {
                   </CardHeader>
                   <div className="space-y-3 mt-2">
                     {user.roles.map((role) => (
-                      <div key={role.name} className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50">
+                      <div key={roleAssignmentKey(role)} className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50">
                         <div className="flex items-center gap-2">
                           <Shield className="w-4 h-4 text-indigo-500" />
                           <span className="text-sm font-medium text-gray-900">{role.displayName}</span>
@@ -333,6 +333,10 @@ export default function SettingsPage() {
       </div>
     </div>
   );
+}
+
+function roleAssignmentKey(role: { id?: string; name: string; hostelId?: string | null }) {
+  return role.id ?? `${role.name}-${role.hostelId ?? 'global'}`;
 }
 
 function NotificationToggle({

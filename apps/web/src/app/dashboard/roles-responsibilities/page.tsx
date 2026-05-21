@@ -33,7 +33,7 @@ type PermissionAction =
   | 'Publish'
   | 'Other';
 
-interface SuperAdminPermission {
+interface RolePermission {
   module: string;
   feature: string;
   key: string;
@@ -44,11 +44,12 @@ interface SuperAdminPermission {
   locked?: boolean;
 }
 
-const STORAGE_KEY = 'bms.super-admin.roles-responsibilities.v1';
+const SUPER_ADMIN_STORAGE_KEY = 'bms.super-admin.roles-responsibilities.v1';
+const HOSTEL_ADMIN_STORAGE_KEY = 'bms.hostel-admin.roles-responsibilities.v1';
 const CHANGE_EVENT = 'super-admin-permissions-change';
 const ROLE_DETAILS_STORAGE_KEY = 'bms.roles-permissions.role-details.v1';
 
-const SUPER_ADMIN_PERMISSIONS: SuperAdminPermission[] = [
+const SUPER_ADMIN_PERMISSIONS: RolePermission[] = [
   {
     module: 'Authentication',
     feature: 'Login and access Super Admin dashboard',
@@ -277,6 +278,189 @@ const SUPER_ADMIN_PERMISSIONS: SuperAdminPermission[] = [
   },
 ];
 
+const HOSTEL_ADMIN_PERMISSIONS: RolePermission[] = [
+  {
+    module: 'Authentication',
+    feature: 'Login and access Hostel Admin dashboard',
+    key: 'AUTH_LOGIN',
+    accessType: 'NORMAL',
+    scope: 'HOSTEL',
+    note: 'Required for Hostel Admin access. This control is locked on.',
+    defaultEnabled: true,
+    locked: true,
+  },
+  {
+    module: 'User Management',
+    feature: 'Create users for hostel operations',
+    key: 'USER_CREATE',
+    accessType: 'NORMAL',
+    scope: 'HOSTEL',
+    note: 'Allows Hostel Admin to create users for supported role types.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'User Management',
+    feature: 'View user details',
+    key: 'USER_READ',
+    accessType: 'VISIBILITY',
+    scope: 'HOSTEL',
+    note: 'Allows reading user profile and role details.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'User Management',
+    feature: 'Update user details',
+    key: 'USER_UPDATE',
+    accessType: 'NORMAL',
+    scope: 'HOSTEL',
+    note: 'Allows maintaining user information.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'User Management',
+    feature: 'List users',
+    key: 'USER_LIST',
+    accessType: 'VISIBILITY',
+    scope: 'HOSTEL',
+    note: 'Allows browsing user records.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'Role Management',
+    feature: 'Assign roles to users',
+    key: 'ROLE_ASSIGN',
+    accessType: 'NORMAL',
+    scope: 'HOSTEL',
+    note: 'Allows assigning operational roles such as wardens and staff.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'Role Management',
+    feature: 'Revoke roles from users',
+    key: 'ROLE_REVOKE',
+    accessType: 'NORMAL',
+    scope: 'HOSTEL',
+    note: 'Allows revoking active role assignments.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'Hostel Management',
+    feature: 'Manage hostels and hostel stats',
+    key: 'HOSTEL_MANAGE',
+    accessType: 'NORMAL',
+    scope: 'HOSTEL',
+    note: 'Covers hostel creation, updates, and hostel dashboard visibility.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'Room Management',
+    feature: 'Manage rooms, beds, and room status',
+    key: 'ROOM_MANAGE',
+    accessType: 'NORMAL',
+    scope: 'HOSTEL',
+    note: 'Covers room inventory, bed state, and room status updates.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'Allotments',
+    feature: 'Assign, transfer, and vacate beds',
+    key: 'ALLOTMENT_MANAGE',
+    accessType: 'NORMAL',
+    scope: 'HOSTEL',
+    note: 'Covers student bed assignment lifecycle.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'Finance',
+    feature: 'Manage hostel finance workflows',
+    key: 'FINANCE_MANAGE',
+    accessType: 'NORMAL',
+    scope: 'HOSTEL',
+    note: 'Allows finance-related administrative actions where enabled.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'Finance',
+    feature: 'View student payment records',
+    key: 'PAYMENT_VIEW',
+    accessType: 'VISIBILITY',
+    scope: 'HOSTEL',
+    note: 'Allows payment and fee status visibility.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'Leave Management',
+    feature: 'Approve or reject leave requests',
+    key: 'LEAVE_APPROVE',
+    accessType: 'NORMAL',
+    scope: 'HOSTEL',
+    note: 'Allows leave decisions under Hostel Admin responsibility.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'Mess Management',
+    feature: 'Manage mess operations',
+    key: 'MESS_MANAGE',
+    accessType: 'NORMAL',
+    scope: 'HOSTEL',
+    note: 'Allows managing mess menus, rebates, reports, and operations.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'Complaints',
+    feature: 'View, update, and resolve complaints',
+    key: 'COMPLAINT_MANAGE',
+    accessType: 'NORMAL',
+    scope: 'HOSTEL',
+    note: 'Allows complaint management and resolution tracking.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'Notices',
+    feature: 'Publish hostel notices',
+    key: 'NOTICE_PUBLISH',
+    accessType: 'NORMAL',
+    scope: 'HOSTEL',
+    note: 'Allows publishing notices for hostel audiences.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'Reports',
+    feature: 'View reports and dashboard analytics',
+    key: 'REPORT_VIEW',
+    accessType: 'VISIBILITY',
+    scope: 'HOSTEL',
+    note: 'Allows dashboard, report, and operational analytics visibility.',
+    defaultEnabled: true,
+  },
+  {
+    module: 'Audit',
+    feature: 'View audit logs',
+    key: 'AUDIT_VIEW',
+    accessType: 'VISIBILITY',
+    scope: 'HOSTEL',
+    note: 'Allows reviewing audit history for administrative actions.',
+    defaultEnabled: true,
+  },
+];
+
+const ROLE_PERMISSION_CONFIG: Partial<Record<RoleKey, {
+  endpoint: string;
+  storageKey: string;
+  permissions: RolePermission[];
+}>> = {
+  SUPER_ADMIN: {
+    endpoint: '/roles-responsibilities/super-admin',
+    storageKey: SUPER_ADMIN_STORAGE_KEY,
+    permissions: SUPER_ADMIN_PERMISSIONS,
+  },
+  HOSTEL_ADMIN: {
+    endpoint: '/roles-responsibilities/hostel-admin',
+    storageKey: HOSTEL_ADMIN_STORAGE_KEY,
+    permissions: HOSTEL_ADMIN_PERMISSIONS,
+  },
+};
+
 const accessTypeLabels: Record<AccessType, string> = {
   NORMAL: 'Normal',
   VISIBILITY: 'Visibility',
@@ -285,8 +469,9 @@ const accessTypeLabels: Record<AccessType, string> = {
   REVIEW: 'Review',
 };
 
-function defaultState() {
-  return Object.fromEntries(SUPER_ADMIN_PERMISSIONS.map((item) => [item.key, item.defaultEnabled]));
+function defaultState(role: RoleKey = 'SUPER_ADMIN') {
+  const permissions = ROLE_PERMISSION_CONFIG[role]?.permissions ?? [];
+  return Object.fromEntries(permissions.map((item) => [item.key, item.defaultEnabled]));
 }
 
 const roleDefinitions: Array<{
@@ -310,11 +495,11 @@ const roleDefinitions: Array<{
   {
     key: 'HOSTEL_ADMIN',
     defaultDisplayName: 'Hostel Admin',
-    defaultDescription: 'Operational admin role for hostel management workflows. Permission controls are planned later.',
+    defaultDescription: 'Operational admin role for hostel management, students, allotments, leave, complaints, notices, and reports.',
     defaultColor: '#0891b2',
-    status: 'Coming soon',
+    status: 'Editable',
     icon: Building2,
-    editable: false,
+    editable: true,
   },
   {
     key: 'WARDEN',
@@ -345,8 +530,12 @@ const permissionActionByKey: Record<string, PermissionAction> = {
   AUTH_LOGIN: 'Other',
   DASHBOARD_VIEW_GLOBAL: 'View',
   USER_CREATE: 'Create',
+  USER_READ: 'View',
+  USER_UPDATE: 'Update',
+  USER_LIST: 'View',
   USER_EXPORT: 'Export',
   ROLE_ASSIGN: 'Assign',
+  ROLE_REVOKE: 'Assign',
   BUILDING_MANAGE: 'Update',
   HOSTEL_MANAGE: 'Update',
   WARDEN_ASSIGN: 'Assign',
@@ -367,14 +556,25 @@ const permissionActionByKey: Record<string, PermissionAction> = {
   COMPLAINT_MANAGE: 'Resolve',
   COMPLAINT_CREATE_ON_BEHALF: 'Create',
   NOTICE_MANAGE: 'Publish',
+  FINANCE_MANAGE: 'Update',
+  PAYMENT_VIEW: 'View',
+  LEAVE_APPROVE: 'Approve',
+  MESS_MANAGE: 'Update',
+  NOTICE_PUBLISH: 'Publish',
+  REPORT_VIEW: 'View',
+  AUDIT_VIEW: 'View',
 };
 
 const permissionUiLabelByKey: Record<string, string> = {
   AUTH_LOGIN: 'Access admin login',
   DASHBOARD_VIEW_GLOBAL: 'View dashboard',
   USER_CREATE: 'Create user',
+  USER_READ: 'View users',
+  USER_UPDATE: 'Update users',
+  USER_LIST: 'List users',
   USER_EXPORT: 'Export users',
   ROLE_ASSIGN: 'Assign roles',
+  ROLE_REVOKE: 'Revoke roles',
   BUILDING_MANAGE: 'Manage buildings',
   HOSTEL_MANAGE: 'Manage hostels',
   WARDEN_ASSIGN: 'Assign warden',
@@ -395,6 +595,13 @@ const permissionUiLabelByKey: Record<string, string> = {
   COMPLAINT_MANAGE: 'Resolve complaints',
   COMPLAINT_CREATE_ON_BEHALF: 'Create complaint',
   NOTICE_MANAGE: 'Publish notices',
+  FINANCE_MANAGE: 'Manage finance',
+  PAYMENT_VIEW: 'View payments',
+  LEAVE_APPROVE: 'Approve leave',
+  MESS_MANAGE: 'Manage mess',
+  NOTICE_PUBLISH: 'Publish notices',
+  REPORT_VIEW: 'View reports',
+  AUDIT_VIEW: 'View audit logs',
 };
 
 const colorOptions = ['#4f46e5', '#0891b2', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed'];
@@ -415,38 +622,47 @@ function defaultRoleDetails() {
 export default function RolesResponsibilitiesPage() {
   const { hasRole } = useAuth();
   const { addToast } = useToast();
-  const [enabled, setEnabled] = useState<Record<string, boolean>>(defaultState);
+  const [selectedRole, setSelectedRole] = useState<RoleKey>('SUPER_ADMIN');
+  const [enabled, setEnabled] = useState<Record<string, boolean>>(() => defaultState('SUPER_ADMIN'));
   const [activeType, setActiveType] = useState<AccessType | 'ALL'>('ALL');
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState<RoleKey | null>(null);
   const [roleUserCounts, setRoleUserCounts] = useState<Partial<Record<RoleKey, number>>>({});
   const [roleDetails, setRoleDetails] = useState(defaultRoleDetails);
 
   const isSuperAdmin = hasRole('SUPER_ADMIN');
+  const selectedRoleConfig = ROLE_PERMISSION_CONFIG[selectedRole];
+  const selectedPermissions = selectedRoleConfig?.permissions ?? [];
 
   useEffect(() => {
     const loadPermissions = async () => {
+      if (!selectedRoleConfig) {
+        setEnabled({});
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
       try {
         const res = await api.get<{
           success: boolean;
           data: Array<{ name: string; enabled: boolean }>;
-        }>('/roles-responsibilities/super-admin');
+        }>(selectedRoleConfig.endpoint);
         const next = {
-          ...defaultState(),
+          ...defaultState(selectedRole),
           ...Object.fromEntries(res.data.map((item) => [item.name, item.enabled])),
         };
         setEnabled(next);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem(selectedRoleConfig.storageKey, JSON.stringify(next));
         window.dispatchEvent(new Event(CHANGE_EVENT));
       } catch {
         try {
-          const stored = localStorage.getItem(STORAGE_KEY);
+          const stored = localStorage.getItem(selectedRoleConfig.storageKey);
           if (stored) {
-            setEnabled({ ...defaultState(), ...JSON.parse(stored) });
+            setEnabled({ ...defaultState(selectedRole), ...JSON.parse(stored) });
           }
         } catch {
-          setEnabled(defaultState());
+          setEnabled(defaultState(selectedRole));
         }
       } finally {
         setLoading(false);
@@ -454,7 +670,7 @@ export default function RolesResponsibilitiesPage() {
     };
 
     loadPermissions();
-  }, []);
+  }, [selectedRole, selectedRoleConfig]);
 
   useEffect(() => {
     const loadRoleUserCounts = async () => {
@@ -494,17 +710,17 @@ export default function RolesResponsibilitiesPage() {
   const filteredPermissions = useMemo(
     () =>
       activeType === 'ALL'
-        ? SUPER_ADMIN_PERMISSIONS
-        : SUPER_ADMIN_PERMISSIONS.filter((item) => item.accessType === activeType),
-    [activeType],
+        ? selectedPermissions
+        : selectedPermissions.filter((item) => item.accessType === activeType),
+    [activeType, selectedPermissions],
   );
 
-  const enabledCount = SUPER_ADMIN_PERMISSIONS.filter((item) => enabled[item.key]).length;
-  const overrideCount = SUPER_ADMIN_PERMISSIONS.filter(
+  const enabledCount = selectedPermissions.filter((item) => enabled[item.key]).length;
+  const overrideCount = selectedPermissions.filter(
     (item) => ['OVERRIDE', 'ON_BEHALF', 'REVIEW'].includes(item.accessType) && enabled[item.key],
   ).length;
   const groupedPermissions = useMemo(() => {
-    const groups = new Map<string, SuperAdminPermission[]>();
+    const groups = new Map<string, RolePermission[]>();
 
     for (const permission of filteredPermissions) {
       const existing = groups.get(permission.module) ?? [];
@@ -535,12 +751,14 @@ export default function RolesResponsibilitiesPage() {
 
   const saveState = (next: Record<string, boolean>) => {
     setEnabled(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    if (selectedRoleConfig) {
+      localStorage.setItem(selectedRoleConfig.storageKey, JSON.stringify(next));
+    }
     window.dispatchEvent(new Event(CHANGE_EVENT));
   };
 
-  const togglePermission = async (item: SuperAdminPermission) => {
-    if (item.locked) return;
+  const togglePermission = async (item: RolePermission) => {
+    if (item.locked || !selectedRoleConfig) return;
     const nextEnabled = !enabled[item.key];
     const optimistic = { ...enabled, [item.key]: nextEnabled };
 
@@ -551,12 +769,12 @@ export default function RolesResponsibilitiesPage() {
       const res = await api.patch<{
         success: boolean;
         data: Array<{ name: string; enabled: boolean }>;
-      }>('/roles-responsibilities/super-admin', {
+      }>(selectedRoleConfig.endpoint, {
         permission: item.key,
         enabled: nextEnabled,
       });
       const next = {
-        ...defaultState(),
+        ...defaultState(selectedRole),
         ...Object.fromEntries(res.data.map((permission) => [permission.name, permission.enabled])),
       };
       saveState(next);
@@ -576,26 +794,28 @@ export default function RolesResponsibilitiesPage() {
   };
 
   const resetDefaults = async () => {
-    const next = defaultState();
+    if (!selectedRoleConfig) return;
+
+    const next = defaultState(selectedRole);
     setSavingKey('RESET');
 
     try {
       let latest = next;
-      for (const item of SUPER_ADMIN_PERMISSIONS.filter((permission) => !permission.locked)) {
+      for (const item of selectedPermissions.filter((permission) => !permission.locked)) {
         const res = await api.patch<{
           success: boolean;
           data: Array<{ name: string; enabled: boolean }>;
-        }>('/roles-responsibilities/super-admin', {
+        }>(selectedRoleConfig.endpoint, {
           permission: item.key,
           enabled: item.defaultEnabled,
         });
         latest = {
-          ...defaultState(),
+          ...defaultState(selectedRole),
           ...Object.fromEntries(res.data.map((permission) => [permission.name, permission.enabled])),
         };
       }
       saveState(latest);
-      addToast({ type: 'success', title: 'Super Admin permissions reset to defaults' });
+      addToast({ type: 'success', title: `${roleDetails[selectedRole].displayName} permissions reset to defaults` });
     } catch (err) {
       addToast({
         type: 'error',
@@ -623,9 +843,9 @@ export default function RolesResponsibilitiesPage() {
     <div className="min-h-screen bg-gray-50">
       <Topbar
         title="Roles & Permissions"
-        subtitle="Review roles and manage Super Admin permissions"
+        subtitle="Review roles and manage configurable role permissions"
       >
-        {selectedRole === 'SUPER_ADMIN' && (
+        {selectedRoleConfig && (
           <Button variant="outline" size="sm" onClick={resetDefaults} loading={savingKey === 'RESET'}>
             <RotateCcw className="w-4 h-4" />
             Reset
@@ -637,7 +857,10 @@ export default function RolesResponsibilitiesPage() {
         <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           {roleDefinitions.map((role) => {
             const Icon = role.icon;
-            const permissionCount = role.key === 'SUPER_ADMIN' ? enabledCount : null;
+            const roleConfig = ROLE_PERMISSION_CONFIG[role.key];
+            const permissionCount = role.key === selectedRole
+              ? enabledCount
+              : roleConfig?.permissions.filter((item) => item.defaultEnabled).length ?? null;
             const detail = roleDetails[role.key];
 
             return (
@@ -701,14 +924,13 @@ export default function RolesResponsibilitiesPage() {
           })}
         </section>
 
-        {selectedRole !== 'SUPER_ADMIN' && (
+        {!selectedRoleConfig && (
           <section className="bg-white border border-gray-200 rounded-lg p-6 text-sm text-gray-600">
-            Select <span className="font-medium text-gray-900">Edit</span> on the Super Admin card to manage the
-            currently implemented permission controls.
+            Select an editable role card to manage the currently implemented permission controls.
           </section>
         )}
 
-        {selectedRole === 'SUPER_ADMIN' && (
+        {selectedRoleConfig && (
         <>
           <section className="bg-white border border-gray-200 rounded-lg p-5">
             <div className="flex flex-col lg:flex-row lg:items-start gap-5 justify-between">
@@ -718,15 +940,15 @@ export default function RolesResponsibilitiesPage() {
                   Edit the role label, description, and visual color shown on this page.
                 </p>
               </div>
-              <Badge variant="info">Frontend role profile</Badge>
+              <Badge variant="info">{selectedRole.replace('_', ' ')}</Badge>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr_220px] gap-4 mt-5 items-start">
               <label className="block">
                 <span className="text-xs font-medium text-gray-600">Display name</span>
                 <input
-                  value={roleDetails.SUPER_ADMIN.displayName}
-                  onChange={(event) => updateRoleDetail('SUPER_ADMIN', 'displayName', event.target.value)}
+                  value={roleDetails[selectedRole].displayName}
+                  onChange={(event) => updateRoleDetail(selectedRole, 'displayName', event.target.value)}
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
               </label>
@@ -734,8 +956,8 @@ export default function RolesResponsibilitiesPage() {
               <label className="block">
                 <span className="text-xs font-medium text-gray-600">Description</span>
                 <textarea
-                  value={roleDetails.SUPER_ADMIN.description}
-                  onChange={(event) => updateRoleDetail('SUPER_ADMIN', 'description', event.target.value)}
+                  value={roleDetails[selectedRole].description}
+                  onChange={(event) => updateRoleDetail(selectedRole, 'description', event.target.value)}
                   rows={3}
                   className="mt-1 block w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm leading-5 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
@@ -748,10 +970,10 @@ export default function RolesResponsibilitiesPage() {
                     <button
                       key={color}
                       type="button"
-                      onClick={() => updateRoleDetail('SUPER_ADMIN', 'color', color)}
+                      onClick={() => updateRoleDetail(selectedRole, 'color', color)}
                       className={cn(
                         'h-8 w-8 rounded-full border-2 transition',
-                        roleDetails.SUPER_ADMIN.color === color ? 'border-gray-900' : 'border-white shadow-sm',
+                        roleDetails[selectedRole].color === color ? 'border-gray-900' : 'border-white shadow-sm',
                       )}
                       style={{ backgroundColor: color }}
                       aria-label={`Use role color ${color}`}
@@ -759,8 +981,8 @@ export default function RolesResponsibilitiesPage() {
                   ))}
                   <input
                     type="color"
-                    value={roleDetails.SUPER_ADMIN.color}
-                    onChange={(event) => updateRoleDetail('SUPER_ADMIN', 'color', event.target.value)}
+                    value={roleDetails[selectedRole].color}
+                    onChange={(event) => updateRoleDetail(selectedRole, 'color', event.target.value)}
                     className="h-8 w-10 cursor-pointer rounded border border-gray-200 bg-white"
                     aria-label="Custom role color"
                   />
@@ -886,9 +1108,8 @@ export default function RolesResponsibilitiesPage() {
             <h3 className="font-semibold text-gray-900">Next Role Expansion</h3>
           </div>
           <p className="text-sm text-gray-600">
-            Hostel Admin is shown as a role card for planning only. The current editable permissions and backend
-            enforcement still apply to Super Admin; Hostel Admin permission toggles can be added later with scoped
-            checks, audit rules, and separate defaults.
+            Super Admin and Hostel Admin now have configurable permission lists. Warden permission controls can be
+            added later once the scoped defaults and enforcement rules are finalized.
           </p>
         </section>
       </div>

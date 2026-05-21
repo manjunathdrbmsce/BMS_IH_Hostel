@@ -42,7 +42,12 @@ interface User {
   status: string;
   createdAt: string;
   lastLoginAt: string | null;
-  roles: Array<{ name: string; displayName: string }>;
+  roles: Array<{
+    id?: string;
+    name: string;
+    displayName: string;
+    hostelId?: string | null;
+  }>;
 }
 
 interface UsersResponse {
@@ -194,7 +199,7 @@ export default function UsersPage() {
         <div className="flex flex-wrap gap-1">
           {user.roles.map((r) => (
             <span
-              key={r.name}
+              key={roleAssignmentKey(r)}
               className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${roleColor(r.name)}`}
             >
               {r.displayName}
@@ -410,4 +415,8 @@ export default function UsersPage() {
       </Modal>
     </div>
   );
+}
+
+function roleAssignmentKey(role: { id?: string; name: string; hostelId?: string | null }) {
+  return role.id ?? `${role.name}-${role.hostelId ?? 'global'}`;
 }

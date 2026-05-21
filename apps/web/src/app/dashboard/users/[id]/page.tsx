@@ -43,6 +43,7 @@ interface UserDetail {
   lastLoginAt: string | null;
   createdBy: string | null;
   roles: Array<{
+    id?: string;
     name: string;
     displayName: string;
     assignedAt: string;
@@ -192,7 +193,7 @@ export default function UserDetailPage() {
               <div className="flex flex-wrap gap-2 mb-4">
                 {user.roles.map((r) => (
                   <span
-                    key={r.name}
+                    key={roleAssignmentKey(r)}
                     className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${roleColor(r.name)}`}
                   >
                     <Shield className="w-3 h-3 mr-1" />
@@ -220,7 +221,7 @@ export default function UserDetailPage() {
             <div className="space-y-3">
               {user.roles.map((role) => (
                 <div
-                  key={role.name}
+                  key={roleAssignmentKey(role)}
                   className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50"
                 >
                   <div className="flex items-center gap-2">
@@ -339,6 +340,10 @@ export default function UserDetailPage() {
       </Modal>
     </div>
   );
+}
+
+function roleAssignmentKey(role: { id?: string; name: string; hostelId?: string | null }) {
+  return role.id ?? `${role.name}-${role.hostelId ?? 'global'}`;
 }
 
 function InfoItem({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {

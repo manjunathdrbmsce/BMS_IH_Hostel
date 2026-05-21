@@ -17,6 +17,7 @@ export interface UserProfile {
   firstName: string;
   lastName: string;
   roles: Array<{
+    id?: string;
     name: string;
     displayName: string;
     hostelId?: string | null;
