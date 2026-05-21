@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { Prisma, LeaveStatus, LeaveType } from '@prisma/client';
@@ -301,6 +302,9 @@ export class LeaveService {
         parent: {
           select: { id: true, firstName: true, lastName: true },
         },
+        parentOverrideBy: {
+          select: { id: true, firstName: true, lastName: true },
+        },
       },
     });
 
@@ -315,13 +319,37 @@ export class LeaveService {
     return leave;
   }
 
-  async findMany(query: ListLeaveQueryDto, scope: HostelScope = 'ALL') {
+  async getLinkedStudentIds(parentId: string) {
+    const guardianLinks = await this.prisma.guardianLink.findMany({
+      where: { guardianId: parentId },
+      select: { studentId: true },
+    });
+
+    return guardianLinks.map((link) => link.studentId);
+  }
+
+  async isParentLinkedToStudent(parentId: string, studentId: string) {
+    const link = await this.prisma.guardianLink.findFirst({
+      where: { guardianId: parentId, studentId },
+      select: { id: true },
+    });
+
+    return !!link;
+  }
+
+  async findMany(query: ListLeaveQueryDto, scope: HostelScope = 'ALL', studentIds?: string[]) {
     const { page = 1, limit = 20, studentId, hostelId, status, type, search } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.LeaveRequestWhereInput = {};
 
     if (studentId) where.studentId = studentId;
+    if (studentIds) {
+      if (studentId && !studentIds.includes(studentId)) {
+        throw new NotFoundException('Leave requests not found');
+      }
+      where.studentId = studentId || { in: studentIds };
+    }
     if (hostelId) where.hostelId = hostelId;
     if (scope !== 'ALL') {
       if (hostelId && !scope.includes(hostelId)) {
@@ -370,12 +398,17 @@ export class LeaveService {
       throw new ConflictException('Leave request is not in PENDING status');
     }
 
+    await this.assertParentLinkedToLeave(parentId, leave.studentId);
+
     await this.prisma.leaveRequest.update({
       where: { id },
       data: {
         status: LeaveStatus.PARENT_APPROVED,
         parentApprovalAt: new Date(),
         parentId,
+        parentOverrideById: null,
+        parentOverrideAt: null,
+        parentOverrideReason: null,
       },
     });
 
@@ -392,11 +425,43 @@ export class LeaveService {
       throw new ConflictException('Leave request is not in PENDING status');
     }
 
+    await this.assertParentLinkedToLeave(parentId, leave.studentId);
+
     await this.prisma.leaveRequest.update({
       where: { id },
       data: {
         status: LeaveStatus.PARENT_REJECTED,
         parentId,
+        parentOverrideById: null,
+        parentOverrideAt: null,
+        parentOverrideReason: null,
+      },
+    });
+
+    return this.findById(id);
+  }
+
+  async parentOverride(id: string, actorId: string, reason: string, scope: HostelScope = 'ALL') {
+    const trimmedReason = reason?.trim();
+    if (!trimmedReason) {
+      throw new BadRequestException('Override reason is required');
+    }
+
+    const leave = await this.findById(id, scope);
+
+    if (leave.status !== 'PENDING') {
+      throw new ConflictException('Leave request is not in PENDING status');
+    }
+
+    await this.prisma.leaveRequest.update({
+      where: { id },
+      data: {
+        status: LeaveStatus.PARENT_APPROVED,
+        parentId: null,
+        parentApprovalAt: null,
+        parentOverrideById: actorId,
+        parentOverrideAt: new Date(),
+        parentOverrideReason: trimmedReason,
       },
     });
 
@@ -530,5 +595,11 @@ export class LeaveService {
       cancelled,
       total: pending + parentApproved + parentRejected + wardenApproved + rejected + cancelled,
     };
+  }
+
+  private async assertParentLinkedToLeave(parentId: string, studentId: string) {
+    if (!(await this.isParentLinkedToStudent(parentId, studentId))) {
+      throw new ForbiddenException('Parent is not linked to this student');
+    }
   }
 }

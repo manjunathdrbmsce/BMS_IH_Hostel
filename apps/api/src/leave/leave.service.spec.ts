@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AttendanceService } from '../attendance/attendance.service';
+import { MessRebateService } from '../mess/mess-rebate.service';
 import { LeaveType, LeaveStatus } from '@prisma/client';
 
 // ---------------------------------------------------------------------------
@@ -23,7 +24,8 @@ const mockPrisma = {
   hostel: { findUnique: jest.fn() },
   buildingPolicy: { findFirst: jest.fn() },
   bedAssignment: { findFirst: jest.fn(), updateMany: jest.fn() },
-  guardianLink: { findMany: jest.fn() },
+  guardianLink: { findMany: jest.fn(), findFirst: jest.fn() },
+  gatePass: { create: jest.fn() },
 };
 
 const mockLeave = {
@@ -58,9 +60,10 @@ describe('LeaveService', () => {
       providers: [
         LeaveService,
         { provide: PrismaService, useValue: mockPrisma },
-        { provide: WhatsAppService, useValue: { sendTemplateMessage: jest.fn() } },
-        { provide: NotificationsService, useValue: { notifyParents: jest.fn(), notifyWardens: jest.fn() } },
+        { provide: WhatsAppService, useValue: { sendTemplateMessage: jest.fn(), sendLeaveApprovalRequest: jest.fn() } },
+        { provide: NotificationsService, useValue: { notifyParents: jest.fn(), notifyWardens: jest.fn(), createNotification: jest.fn() } },
         { provide: AttendanceService, useValue: { markLeaveAttendance: jest.fn() } },
+        { provide: MessRebateService, useValue: { createAutoRebate: jest.fn() } },
       ],
     }).compile();
     service = module.get<LeaveService>(LeaveService);
@@ -140,6 +143,7 @@ describe('LeaveService', () => {
       mockPrisma.leaveRequest.findUnique
         .mockResolvedValueOnce({ ...mockLeave, status: LeaveStatus.PENDING })
         .mockResolvedValueOnce({ ...mockLeave, status: LeaveStatus.PARENT_APPROVED });
+      mockPrisma.guardianLink.findFirst.mockResolvedValue({ id: 'gl-1' });
       mockPrisma.leaveRequest.update.mockResolvedValue({});
       const result = await service.parentApprove('lr-1', 'parent-1');
       expect(mockPrisma.leaveRequest.update).toHaveBeenCalledWith(
@@ -150,6 +154,45 @@ describe('LeaveService', () => {
     it('should throw if not PENDING', async () => {
       mockPrisma.leaveRequest.findUnique.mockResolvedValue({ ...mockLeave, status: LeaveStatus.WARDEN_APPROVED });
       await expect(service.parentApprove('lr-1', 'p-1')).rejects.toThrow(ConflictException);
+    });
+
+    it('should throw if parent is not linked to student', async () => {
+      mockPrisma.leaveRequest.findUnique.mockResolvedValue({ ...mockLeave, status: LeaveStatus.PENDING });
+      mockPrisma.guardianLink.findFirst.mockResolvedValue(null);
+      await expect(service.parentApprove('lr-1', 'unlinked-parent')).rejects.toThrow();
+    });
+  });
+
+  describe('parentOverride', () => {
+    it('should store admin override metadata without parent approval metadata', async () => {
+      mockPrisma.leaveRequest.findUnique
+        .mockResolvedValueOnce({ ...mockLeave, status: LeaveStatus.PENDING })
+        .mockResolvedValueOnce({
+          ...mockLeave,
+          status: LeaveStatus.PARENT_APPROVED,
+          parentOverrideById: 'admin-1',
+          parentOverrideAt: new Date(),
+          parentOverrideReason: 'Emergency approval',
+        });
+      mockPrisma.leaveRequest.update.mockResolvedValue({});
+
+      await service.parentOverride('lr-1', 'admin-1', 'Emergency approval');
+
+      expect(mockPrisma.leaveRequest.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: LeaveStatus.PARENT_APPROVED,
+            parentId: null,
+            parentApprovalAt: null,
+            parentOverrideById: 'admin-1',
+            parentOverrideReason: 'Emergency approval',
+          }),
+        }),
+      );
+    });
+
+    it('should require override reason', async () => {
+      await expect(service.parentOverride('lr-1', 'admin-1', ' ')).rejects.toThrow(BadRequestException);
     });
   });
 

@@ -59,6 +59,12 @@ export class RejectLeaveDto {
   rejectionReason: string;
 }
 
+export class ParentOverrideDto {
+  @ApiProperty({ description: 'Reason for overriding parent approval' })
+  @IsString()
+  reason: string;
+}
+
 export class ListLeaveQueryDto {
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()

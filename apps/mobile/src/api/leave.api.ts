@@ -76,6 +76,9 @@ export const leaveApi = {
   parentReject: (id: string, rejectionReason?: string) =>
     apiClient.post<ApiResponse<LeaveRequest>>(`/leave/${id}/parent-reject`, rejectionReason ? { rejectionReason } : undefined),
 
+  parentOverride: (id: string, reason: string) =>
+    apiClient.post<ApiResponse<LeaveRequest>>(`/leave/${id}/parent-override`, { reason }),
+
   wardenApprove: (id: string) =>
     apiClient.post<ApiResponse<LeaveRequest>>(`/leave/${id}/warden-approve`),
 

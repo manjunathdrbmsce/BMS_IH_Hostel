@@ -32,7 +32,7 @@ const rules: SuperAdminPermissionRule[] = [
   { method: 'GET', pattern: /^\/registration(?:\/.*)?$/, permission: 'REGISTRATION_VIEW' },
   { method: 'POST', pattern: /^\/registration\/draft$/, permission: 'REGISTRATION_DRAFT_EDIT' },
   { method: 'GET', pattern: /^\/leave\/stats$/, permission: 'LEAVE_STATS_VIEW' },
-  { method: 'POST', pattern: /^\/leave\/[^/]+\/parent-(?:approve|reject)$/, permission: 'LEAVE_PARENT_OVERRIDE' },
+  { method: 'POST', pattern: /^\/leave\/[^/]+\/parent-override$/, permission: 'LEAVE_PARENT_OVERRIDE' },
   { method: 'POST', pattern: /^\/leave\/[^/]+\/(?:warden-approve|reject)$/, permission: 'LEAVE_ADMIN_DECIDE' },
   { method: 'GET', pattern: /^\/gate(?:\/.*)?$/, permission: 'GATE_MANAGE' },
   { method: 'POST', pattern: /^\/gate(?:\/.*)?$/, permission: 'GATE_MANAGE' },

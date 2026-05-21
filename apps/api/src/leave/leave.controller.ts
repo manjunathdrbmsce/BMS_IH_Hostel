@@ -17,7 +17,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { LeaveService } from './leave.service';
-import { CreateLeaveRequestDto, ApproveLeaveDto, RejectLeaveDto, ListLeaveQueryDto } from './dto';
+import { CreateLeaveRequestDto, ParentOverrideDto, RejectLeaveDto, ListLeaveQueryDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -63,14 +63,15 @@ export class LeaveController {
   @ApiOperation({ summary: 'List leave requests with filters' })
   @ApiResponse({ status: 200, description: 'Leave requests list' })
   async findAll(@Query() query: ListLeaveQueryDto, @CurrentUser() user: any) {
-    // Students & parents can only see their own leave requests
+    // Students see their own leave requests; parents see linked wards' requests.
     const isStudent = hasRole(user, 'STUDENT');
     const isParent = hasRole(user, 'PARENT');
-    if (isStudent || isParent) {
+    if (isStudent) {
       query.studentId = user.id;
     }
+    const parentStudentIds = isParent ? await this.leaveService.getLinkedStudentIds(user.id) : undefined;
     const scope = isStudent || isParent ? 'ALL' : await this.accessScopeService.getAccessibleHostelIds(user);
-    const result = await this.leaveService.findMany(query, scope);
+    const result = await this.leaveService.findMany(query, scope, parentStudentIds);
     return { success: true, ...result };
   }
 
@@ -94,15 +95,18 @@ export class LeaveController {
     const isParent = hasRole(user, 'PARENT');
     const scope = isStudent || isParent ? 'ALL' : await this.accessScopeService.getAccessibleHostelIds(user);
     const leave = await this.leaveService.findById(id, scope);
-    // Students & parents can only view their own leave requests
-    if ((isStudent || isParent) && leave.studentId !== user.id) {
+    // Students can only view their own requests. Parents can only view linked wards' requests.
+    if (isStudent && leave.studentId !== user.id) {
+      throw new NotFoundException('Leave request not found');
+    }
+    if (isParent && !(await this.leaveService.isParentLinkedToStudent(user.id, leave.studentId))) {
       throw new NotFoundException('Leave request not found');
     }
     return { success: true, data: leave };
   }
 
   @Post(':id/parent-approve')
-  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'PARENT')
+  @Roles('PARENT')
   @AuditAction('LEAVE_PARENT_APPROVE', 'leave')
   @ApiOperation({ summary: 'Parent approves a leave request' })
   @ApiResponse({ status: 200, description: 'Leave request approved by parent' })
@@ -115,7 +119,7 @@ export class LeaveController {
   }
 
   @Post(':id/parent-reject')
-  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'PARENT')
+  @Roles('PARENT')
   @AuditAction('LEAVE_PARENT_REJECT', 'leave')
   @ApiOperation({ summary: 'Parent rejects a leave request' })
   @ApiResponse({ status: 200, description: 'Leave request rejected by parent' })
@@ -124,6 +128,21 @@ export class LeaveController {
     @CurrentUser() user: any,
   ) {
     const leave = await this.leaveService.parentReject(id, user.id);
+    return { success: true, data: leave };
+  }
+
+  @Post(':id/parent-override')
+  @Roles('SUPER_ADMIN', 'HOSTEL_ADMIN')
+  @AuditAction('LEAVE_PARENT_OVERRIDE', 'leave')
+  @ApiOperation({ summary: 'Admin overrides parent approval requirement' })
+  @ApiResponse({ status: 200, description: 'Parent approval overridden by admin' })
+  async parentOverride(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ParentOverrideDto,
+    @CurrentUser() user: any,
+  ) {
+    const scope = await this.accessScopeService.getAccessibleHostelIds(user);
+    const leave = await this.leaveService.parentOverride(id, user.id, dto.reason, scope);
     return { success: true, data: leave };
   }
 

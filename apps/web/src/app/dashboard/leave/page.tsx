@@ -62,6 +62,7 @@ export default function LeavePage() {
   const isStudent = hasRole('STUDENT');
   const isParent = hasRole('PARENT');
   const canManage = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN');
+  const canOverrideParent = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN');
 
   // Fetch eligibility when form opens
   useEffect(() => {
@@ -157,6 +158,18 @@ export default function LeavePage() {
     } catch (err: unknown) {
       addToast({ type: 'error', title: err instanceof Error ? err.message : 'Action failed' });
     }
+  };
+
+  const handleParentOverride = (id: string) => {
+    const reason = prompt('Override reason:');
+    if (!reason?.trim()) return;
+    handleAction(id, 'parent-override', { reason: reason.trim() });
+  };
+
+  const handleAdminReject = (id: string) => {
+    const rejectionReason = prompt('Rejection reason:');
+    if (!rejectionReason?.trim()) return;
+    handleAction(id, 'reject', { rejectionReason: rejectionReason.trim() });
   };
 
   const viewDetail = async (id: string) => {
@@ -398,6 +411,13 @@ export default function LeavePage() {
             {showDetail.warden && <div className="text-sm"><span className="text-gray-500">Warden:</span> {showDetail.warden.firstName} {showDetail.warden.lastName}</div>}
             {showDetail.parent && <div className="text-sm"><span className="text-gray-500">Parent:</span> {showDetail.parent.firstName} {showDetail.parent.lastName}</div>}
             {showDetail.parentApprovalAt && <div className="text-sm"><span className="text-gray-500">Parent Approved:</span> {fmtDate(showDetail.parentApprovalAt)}</div>}
+            {showDetail.parentOverrideBy && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+                <div><span className="font-medium">Parent approval overridden by:</span> {showDetail.parentOverrideBy.firstName} {showDetail.parentOverrideBy.lastName}</div>
+                <div><span className="font-medium">Override date:</span> {fmtDate(showDetail.parentOverrideAt)}</div>
+                <div><span className="font-medium">Reason:</span> {showDetail.parentOverrideReason || '\u2014'}</div>
+              </div>
+            )}
             {showDetail.wardenApprovalAt && <div className="text-sm"><span className="text-gray-500">Warden Approved:</span> {fmtDate(showDetail.wardenApprovalAt)}</div>}
 
             {/* Status-specific info notes */}
@@ -411,21 +431,36 @@ export default function LeavePage() {
                 <Ban className="h-4 w-4" /> Parent has rejected this leave request
               </div>
             )}
-            {showDetail.status === 'PARENT_APPROVED' && !showDetail.wardenApprovalAt && (
+            {showDetail.status === 'PARENT_APPROVED' && !showDetail.wardenApprovalAt && !showDetail.parentOverrideBy && (
               <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
                 ✅ Parent approved — Awaiting warden approval
               </div>
             )}
 
             {/* PENDING: Parent-level approval — for Parent role OR Admin/Warden override */}
-            {showDetail.status === 'PENDING' && (isParent || canManage) && (
+            {showDetail.status === 'PARENT_APPROVED' && !showDetail.wardenApprovalAt && showDetail.parentOverrideBy && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+                Parent approval was overridden by an admin - awaiting warden approval
+              </div>
+            )}
+
+            {showDetail.status === 'PENDING' && isParent && (
               <div className="space-y-2 pt-2 border-t">
-                {canManage && !isParent && (
-                  <p className="text-xs text-gray-500 italic">Admin/Warden: Approve on behalf of parent</p>
-                )}
                 <div className="flex gap-2">
                   <Button onClick={() => handleAction(showDetail.id, 'parent-approve')} variant="primary" className="flex-1"><CheckCircle2 className="h-4 w-4 mr-1" /> Parent Approve</Button>
                   <Button onClick={() => handleAction(showDetail.id, 'parent-reject')} variant="danger" className="flex-1"><XCircle className="h-4 w-4 mr-1" /> Parent Reject</Button>
+                </div>
+              </div>
+            )}
+
+            {showDetail.status === 'PENDING' && !isParent && canManage && (
+              <div className="space-y-2 pt-2 border-t">
+                <p className="text-xs text-gray-500">Admin action must be recorded separately from parent consent.</p>
+                <div className="flex gap-2">
+                  {canOverrideParent && (
+                    <Button onClick={() => handleParentOverride(showDetail.id)} variant="outline" className="flex-1"><CheckCircle2 className="h-4 w-4 mr-1" /> Override Parent Approval</Button>
+                  )}
+                  <Button onClick={() => handleAdminReject(showDetail.id)} variant="danger" className="flex-1"><XCircle className="h-4 w-4 mr-1" /> Reject Leave</Button>
                 </div>
               </div>
             )}
@@ -434,7 +469,7 @@ export default function LeavePage() {
             {canManage && showDetail.status === 'PARENT_APPROVED' && (
               <div className="flex gap-2 pt-2 border-t">
                 <Button onClick={() => handleAction(showDetail.id, 'warden-approve')} variant="primary" className="flex-1"><CheckCircle2 className="h-4 w-4 mr-1" /> Warden Approve</Button>
-                <Button onClick={() => { const r = prompt('Rejection reason:'); if (r) handleAction(showDetail.id, 'reject', { rejectionReason: r }); }} variant="danger" className="flex-1"><XCircle className="h-4 w-4 mr-1" /> Reject</Button>
+                <Button onClick={() => handleAdminReject(showDetail.id)} variant="danger" className="flex-1"><XCircle className="h-4 w-4 mr-1" /> Reject</Button>
               </div>
             )}
 

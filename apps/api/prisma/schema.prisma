@@ -51,6 +51,7 @@ model User {
   leaveRequests        LeaveRequest[]     @relation("LeaveStudent")
   leaveWardenApprovals LeaveRequest[]     @relation("LeaveWarden")
   leaveParentActions   LeaveRequest[]     @relation("LeaveParent")
+  leaveParentOverrides LeaveRequest[]     @relation("LeaveParentOverride")
   complaints           Complaint[]        @relation("ComplaintStudent")
   complaintsAssigned   Complaint[]        @relation("ComplaintAssignedTo")
   complaintComments    ComplaintComment[]
@@ -603,12 +604,15 @@ model LeaveRequest {
   proofUrl  String?     @map("proof_url") @db.VarChar(500)
   status    LeaveStatus @default(PENDING)
 
-  parentApprovalAt DateTime? @map("parent_approval_at")
-  wardenApprovalAt DateTime? @map("warden_approval_at")
-  rejectedAt       DateTime? @map("rejected_at")
-  rejectionReason  String?   @map("rejection_reason") @db.Text
-  wardenId         String?   @map("warden_id") @db.Uuid
-  parentId         String?   @map("parent_id") @db.Uuid
+  parentApprovalAt     DateTime? @map("parent_approval_at")
+  wardenApprovalAt     DateTime? @map("warden_approval_at")
+  rejectedAt           DateTime? @map("rejected_at")
+  rejectionReason      String?   @map("rejection_reason") @db.Text
+  wardenId             String?   @map("warden_id") @db.Uuid
+  parentId             String?   @map("parent_id") @db.Uuid
+  parentOverrideById   String?   @map("parent_override_by_id") @db.Uuid
+  parentOverrideAt     DateTime? @map("parent_override_at")
+  parentOverrideReason String?   @map("parent_override_reason") @db.Text
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -618,6 +622,7 @@ model LeaveRequest {
   hostel            Hostel            @relation(fields: [hostelId], references: [id])
   warden            User?             @relation("LeaveWarden", fields: [wardenId], references: [id])
   parent            User?             @relation("LeaveParent", fields: [parentId], references: [id])
+  parentOverrideBy  User?             @relation("LeaveParentOverride", fields: [parentOverrideById], references: [id])
   gateEntries       GateEntry[]       @relation("GateLeave")
   notifications     Notification[]    @relation("LeaveNotifications")
   attendanceRecords DailyAttendance[] @relation("AttendanceLeave")
@@ -628,6 +633,7 @@ model LeaveRequest {
   @@index([studentId])
   @@index([hostelId])
   @@index([status])
+  @@index([parentOverrideById])
   @@index([fromDate, toDate])
   @@map("leave_requests")
 }
