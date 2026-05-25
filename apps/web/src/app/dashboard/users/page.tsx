@@ -64,8 +64,15 @@ export default function UsersPage() {
   const isSuperAdmin = hasRole('SUPER_ADMIN');
   const [superAdminPermissions, setSuperAdminPermissions] = useState<Record<string, boolean>>({});
   const storedExportState = superAdminPermissions.USER_EXPORT;
+  const storedCreateState = superAdminPermissions.USER_CREATE;
+  const storedRoleAssignState = superAdminPermissions.ROLE_ASSIGN;
   const canExport = !isSuperAdmin
     || (storedExportState !== undefined ? storedExportState : user?.permissions?.includes('USER_EXPORT'));
+  const canCreateUsers = !isSuperAdmin
+    || (storedCreateState !== undefined ? storedCreateState : user?.permissions?.includes('USER_CREATE'));
+  const canAssignRoles = !isSuperAdmin
+    || (storedRoleAssignState !== undefined ? storedRoleAssignState : user?.permissions?.includes('ROLE_ASSIGN'));
+  const canCreateUserWithRole = canWrite && canCreateUsers && canAssignRoles;
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,6 +144,16 @@ export default function UsersPage() {
   }, []);
 
   const handleCreate = async () => {
+    if (!canCreateUserWithRole) {
+      addToast({
+        type: 'error',
+        title: !canCreateUsers
+          ? 'User creation is disabled for Super Admin'
+          : 'Role assignment is disabled for Super Admin',
+      });
+      return;
+    }
+
     setCreating(true);
     try {
       await api.post('/users', form);
@@ -281,7 +298,18 @@ export default function UsersPage() {
               Export
             </Button>
             {canWrite && (
-              <Button size="sm" onClick={() => setShowCreateModal(true)}>
+              <Button
+                size="sm"
+                onClick={() => setShowCreateModal(true)}
+                disabled={!canCreateUserWithRole}
+                title={
+                  !canCreateUsers
+                    ? 'User creation is disabled'
+                    : !canAssignRoles
+                      ? 'Role assignment is disabled'
+                      : undefined
+                }
+              >
                 <UserPlus className="w-4 h-4 mr-1" />
                 Add User
               </Button>
@@ -401,6 +429,8 @@ export default function UsersPage() {
             value={form.roles[0]}
             onChange={(e) => setForm({ ...form, roles: [e.target.value] })}
             options={ROLES.map((r) => ({ value: r, label: r.replace(/_/g, ' ') }))}
+            disabled={!canAssignRoles}
+            error={!canAssignRoles ? 'Role assignment is disabled for Super Admin.' : undefined}
           />
           <div className="flex justify-end gap-3 pt-4 border-t">
             <Button variant="outline" onClick={() => setShowCreateModal(false)}>

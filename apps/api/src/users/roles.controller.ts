@@ -114,9 +114,12 @@ export class RolesController {
             throw new NotFoundException(`Role "${dto.roleName}" not found`);
         }
 
-        this.enforceSuperAdminPermission(
+        this.enforceSuperAdminPermissions(
             currentUser,
-            role.name === 'WARDEN' && dto.hostelId ? 'WARDEN_ASSIGN' : 'ROLE_ASSIGN',
+            [
+                'ROLE_ASSIGN',
+                ...(role.name === 'WARDEN' && dto.hostelId ? ['WARDEN_ASSIGN'] : []),
+            ],
         );
 
         if (this.hostelScopedRoles.has(role.name) && !dto.hostelId) {
@@ -238,9 +241,12 @@ export class RolesController {
             throw new ForbiddenException('Role assignment not found or already revoked');
         }
 
-        this.enforceSuperAdminPermission(
+        this.enforceSuperAdminPermissions(
             currentUser,
-            assignment.role.name === 'WARDEN' && assignment.hostelId ? 'WARDEN_ASSIGN' : 'ROLE_ASSIGN',
+            [
+                'ROLE_ASSIGN',
+                ...(assignment.role.name === 'WARDEN' && assignment.hostelId ? ['WARDEN_ASSIGN'] : []),
+            ],
         );
 
         // Safety: prevent removing the last SUPER_ADMIN
@@ -270,13 +276,15 @@ export class RolesController {
         };
     }
 
-    private enforceSuperAdminPermission(user: any, permission: string) {
+    private enforceSuperAdminPermissions(user: any, permissions: string[]) {
         if (!user?.roles?.includes('SUPER_ADMIN')) {
             return;
         }
 
-        if (!user.permissions?.includes(permission)) {
-            throw new ForbiddenException(`SUPER_ADMIN permission disabled: ${permission}`);
+        for (const permission of permissions) {
+            if (!user.permissions?.includes(permission)) {
+                throw new ForbiddenException(`SUPER_ADMIN permission disabled: ${permission}`);
+            }
         }
     }
 }

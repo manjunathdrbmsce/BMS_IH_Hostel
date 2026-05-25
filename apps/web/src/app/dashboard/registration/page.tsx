@@ -928,7 +928,7 @@ export default function RegistrationPage() {
               <ChevronLeft className="h-4 w-4 mr-1" /> Back
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={saveDraft} disabled={saving}>
+              <Button variant="outline" onClick={() => saveDraft()} disabled={saving}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Draft'}
               </Button>
               {step < WIZARD_STEPS.length - 1 ? (

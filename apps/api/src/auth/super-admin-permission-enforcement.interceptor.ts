@@ -61,10 +61,12 @@ export class SuperAdminPermissionEnforcementInterceptor implements NestIntercept
 
     const path = this.normalizePath(request.originalUrl || request.url || '');
     const method = request.method;
-    const rolePermission = this.getRoleAssignmentPermission(method, path, request.body);
+    const rolePermissions = this.getRoleAssignmentPermissions(method, path, request.body);
 
-    if (rolePermission && !user.permissions?.includes(rolePermission)) {
-      throw new ForbiddenException(`SUPER_ADMIN permission disabled: ${rolePermission}`);
+    for (const permission of rolePermissions) {
+      if (!user.permissions?.includes(permission)) {
+        throw new ForbiddenException(`SUPER_ADMIN permission disabled: ${permission}`);
+      }
     }
 
     const rule = rules.find((item) => item.method === method && item.pattern.test(path));
@@ -81,11 +83,29 @@ export class SuperAdminPermissionEnforcementInterceptor implements NestIntercept
     return path || '/';
   }
 
-  private getRoleAssignmentPermission(method: string, path: string, body?: { roleName?: string; hostelId?: string }) {
-    if (method !== 'POST' || !/^\/users\/[^/]+\/roles$/.test(path)) {
-      return null;
+  private getRoleAssignmentPermissions(
+    method: string,
+    path: string,
+    body?: { roleName?: string; hostelId?: string; roles?: string[] },
+  ) {
+    if (method !== 'POST') {
+      return [];
     }
 
-    return body?.roleName === 'WARDEN' && body?.hostelId ? 'WARDEN_ASSIGN' : 'ROLE_ASSIGN';
+    if (/^\/users\/[^/]+\/roles$/.test(path)) {
+      return [
+        'ROLE_ASSIGN',
+        ...(body?.roleName === 'WARDEN' && body?.hostelId ? ['WARDEN_ASSIGN'] : []),
+      ];
+    }
+
+    if (path === '/users' && Array.isArray(body?.roles) && body.roles.length > 0) {
+      return [
+        'ROLE_ASSIGN',
+        ...(body.roles.includes('WARDEN') ? ['WARDEN_ASSIGN'] : []),
+      ];
+    }
+
+    return [];
   }
 }
