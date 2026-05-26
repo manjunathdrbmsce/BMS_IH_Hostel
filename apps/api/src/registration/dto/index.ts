@@ -365,6 +365,36 @@ export class CreateRegistrationDto {
   previousHostelHistory?: string;
 }
 
+export class DraftRegistrationDto {
+  @ApiPropertyOptional({ example: '2025-2026' })
+  @IsOptional()
+  @IsString()
+  @MinLength(9)
+  @MaxLength(9)
+  academicYear?: string;
+
+  @ApiPropertyOptional({ description: 'Preferred hostel ID' })
+  @Transform(({ value }) => (value === '' ? undefined : value))
+  @IsOptional()
+  @IsUUID()
+  hostelId?: string;
+
+  @ApiPropertyOptional({ example: 'DOUBLE' })
+  @IsOptional()
+  @IsString()
+  roomTypePreference?: string;
+
+  @ApiPropertyOptional({ example: 'VEG' })
+  @IsOptional()
+  @IsString()
+  messType?: string;
+
+  @ApiPropertyOptional({ example: 'Stayed in Krishna Hostel 2024-2025' })
+  @IsOptional()
+  @IsString()
+  previousHostelHistory?: string;
+}
+
 export class SaveDraftDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -405,8 +435,8 @@ export class SaveDraftDto {
   @ApiPropertyOptional()
   @IsOptional()
   @ValidateNested()
-  @Type(() => CreateRegistrationDto)
-  registration?: CreateRegistrationDto;
+  @Type(() => DraftRegistrationDto)
+  registration?: DraftRegistrationDto;
 }
 
 export class SubmitRegistrationDto {

@@ -131,6 +131,19 @@ describe('RegistrationService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
+    it('should allow admin roles to edit another student draft', async () => {
+      mockPrismaService.hostelRegistration.findUnique.mockResolvedValue(mockReg);
+
+      await service.saveDraft(
+        'reg-1',
+        'admin-1',
+        { personalDetails: { dateOfBirth: '2003-05-15', gender: 'Male', bloodGroup: 'O+' } } as any,
+        ['HOSTEL_ADMIN'],
+      );
+
+      expect(txMock.studentProfile.upsert).toHaveBeenCalled();
+    });
+
     it('should throw BadRequestException if not a draft', async () => {
       mockPrismaService.hostelRegistration.findUnique.mockResolvedValue({
         ...mockReg,

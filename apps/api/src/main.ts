@@ -20,19 +20,33 @@ async function bootstrap() {
   const frontendUrl = configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
 
   // CORS — must be set BEFORE helmet to handle preflight correctly
+  //app.enableCors({
+    //origin: [frontendUrl],
+    //credentials: true,
+    //methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    //allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
+  //});
+
   app.enableCors({
-    origin: [frontendUrl],
+    origin: [
+      'http://localhost:3000',
+      'http://10.126.7.131:3000',
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Request-Id',
+    ],
   });
 
   // Security — helmet after CORS so it doesn't block preflight
-  app.use(
-    helmet({
-      crossOriginResourcePolicy: { policy: 'cross-origin' },
-    }),
-  );
+  //app.use(
+    //helmet({
+      //crossOriginResourcePolicy: { policy: 'cross-origin' },
+    //}),
+  //);
 
   // Global prefix
   app.setGlobalPrefix('api/v1');
@@ -69,9 +83,12 @@ async function bootstrap() {
     },
   });
 
-  await app.listen(port);
-  logger.log(`Application running on http://localhost:${port}`);
-  logger.log(`Swagger docs at http://localhost:${port}/api/docs`);
+  await app.listen(port, '0.0.0.0');
+  logger.log(`Application running on http://0.0.0.0:${port}`);
+  logger.log(`Swagger docs at http://0.0.0.0:${port}/api/docs`);
+  // await app.listen(port);
+  //logger.log(`Application running on http://localhost:${port}`);
+  //logger.log(`Swagger docs at http://localhost:${port}/api/docs`);
 }
 
 bootstrap();

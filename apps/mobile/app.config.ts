@@ -10,7 +10,7 @@ import type { ExpoConfig, ConfigContext } from 'expo/config';
  *   API_BASE_URL=https://staging.yourdomain.com eas build --profile preview
  */
 export default ({ config }: ConfigContext): ExpoConfig => {
-  const apiBaseUrl = process.env.API_BASE_URL ?? 'http://localhost:3001';
+  const apiBaseUrl = process.env.API_BASE_URL ?? 'http://10.126.7.131:3001';
   const androidApiBaseUrl = process.env.ANDROID_API_BASE_URL ?? apiBaseUrl.replace('localhost', '10.0.2.2');
 
   return {

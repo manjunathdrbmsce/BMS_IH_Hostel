@@ -222,6 +222,19 @@ describe('Registration DTOs (Fix #8)', () => {
       expect(errors).toHaveLength(0);
     });
 
+    it('should pass with partial registration fields and empty hostel selection', async () => {
+      const dto = plainToInstance(SaveDraftDto, {
+        registration: {
+          hostelId: '',
+          roomTypePreference: 'DOUBLE',
+        },
+      });
+
+      const errors = await validate(dto);
+      expect(errors).toHaveLength(0);
+      expect(dto.registration?.hostelId).toBeUndefined();
+    });
+
     it('should VALIDATE nested fields when present (Fix #8)', async () => {
       const dto = plainToInstance(SaveDraftDto, {
         academicDetails: { department: '', course: '', year: -5, semester: 0 },

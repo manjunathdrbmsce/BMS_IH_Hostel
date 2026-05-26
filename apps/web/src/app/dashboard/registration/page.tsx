@@ -116,12 +116,16 @@ const defaultWizard: WizardData = {
 const fmtDate = (d: string) =>
   d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
+const stripEmptyStrings = <T extends Record<string, any>>(value: T): Partial<T> =>
+  Object.fromEntries(Object.entries(value).filter(([, v]) => v !== '')) as Partial<T>;
+
 // ── Main Page ───────────────────────────────────────────────────────────
 export default function RegistrationPage() {
   const { user, hasRole } = useAuth();
   const { addToast } = useToast();
   const isStudent = hasRole('STUDENT');
   const canManage = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN', 'DEPUTY_WARDEN', 'ACCOUNTS_OFFICER');
+  const canEditDraft = isStudent || hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN');
   const canAllot = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN');
   const canRecordFee = hasRole('SUPER_ADMIN', 'HOSTEL_ADMIN', 'ACCOUNTS_OFFICER');
 
@@ -170,6 +174,18 @@ export default function RegistrationPage() {
   const [feeReceipt, setFeeReceipt] = useState('');
   const [feeNotes, setFeeNotes] = useState('');
   const [recordingFee, setRecordingFee] = useState(false);
+
+  const buildRegistrationPayload = (includeAcademicYear: boolean) => {
+    const registration = stripEmptyStrings({
+      ...wizard.registration,
+      ...(includeAcademicYear ? { academicYear } : {}),
+    });
+
+    return {
+      ...wizard,
+      registration,
+    };
+  };
 
   // ── Fetch ─────────────────────────────────────────────────────────────
   const fetchData = useCallback(async () => {
@@ -309,7 +325,7 @@ export default function RegistrationPage() {
     if (opts?.silent && !dirty) return;
     setSaving(true);
     try {
-      await api.patch<any>(`/registration/${registrationId}/draft`, wizard);
+      await api.patch<any>(`/registration/${registrationId}/draft`, buildRegistrationPayload(false));
       setDirty(false);
     } catch (e: any) {
       // Surface errors only on explicit user actions, never on silent autosave.
@@ -332,7 +348,7 @@ export default function RegistrationPage() {
     }
     setSaving(true);
     try {
-      await api.post<any>(`/registration/${registrationId}/submit`, wizard);
+      await api.post<any>(`/registration/${registrationId}/submit`, buildRegistrationPayload(true));
       setShowWizard(false);
       fetchData();
     } catch (e: any) {
@@ -843,7 +859,7 @@ export default function RegistrationPage() {
                 key={r.id}
                 className="flex items-center justify-between gap-4 p-4 hover:bg-gray-50 transition-colors cursor-pointer"
                 onClick={() => {
-                  if (r.status === 'DRAFT' && (isStudent || canManage)) {
+                  if (r.status === 'DRAFT' && canEditDraft) {
                     viewDetail(r.id).then(() => {}).catch(() => {});
                     resumeDraft(r);
                   } else {
@@ -866,7 +882,7 @@ export default function RegistrationPage() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Badge variant={statusBadge[r.status] || 'default'}>{REGISTRATION_STATUSES.find(s => s.value === r.status)?.label || r.status}</Badge>
-                  {r.status === 'DRAFT' && (isStudent || canManage) && (
+                  {r.status === 'DRAFT' && canEditDraft && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -992,7 +1008,7 @@ export default function RegistrationPage() {
             </div>
 
             {/* ── Edit Draft action (visible while still in DRAFT) ───────── */}
-            {showDetail.status === 'DRAFT' && (isStudent || canManage) && (
+            {showDetail.status === 'DRAFT' && canEditDraft && (
               <div className="flex justify-end">
                 <Button
                   variant="outline"

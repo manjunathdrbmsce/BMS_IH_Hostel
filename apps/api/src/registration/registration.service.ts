@@ -96,16 +96,26 @@ export class RegistrationService {
   }
 
   // =========================================================================
-  // Student: Save draft (partial data at any step)
+  // Student/Admin: Save draft (partial data at any step)
   // =========================================================================
 
-  async saveDraft(registrationId: string, studentId: string, dto: SaveDraftDto) {
+  async saveDraft(
+    registrationId: string,
+    actorId: string,
+    dto: SaveDraftDto,
+    actorRoles: string[] = [],
+  ) {
     const reg = await this.prisma.hostelRegistration.findUnique({
       where: { id: registrationId },
     });
 
     if (!reg) throw new NotFoundException('Registration not found');
-    if (reg.studentId !== studentId) throw new ForbiddenException('Not your registration');
+    const canEditAnyDraft = actorRoles.some((role) =>
+      ['SUPER_ADMIN', 'HOSTEL_ADMIN', 'WARDEN'].includes(role),
+    );
+    if (reg.studentId !== actorId && !canEditAnyDraft) {
+      throw new ForbiddenException('Not your registration');
+    }
     if (!['DRAFT', 'DOCUMENTS_PENDING'].includes(reg.status)) {
       throw new BadRequestException('Cannot edit a submitted registration');
     }
@@ -223,9 +233,9 @@ export class RegistrationService {
     await this.prisma.$transaction(async (tx) => {
       if (Object.keys(profileData).length > 0) {
         await tx.studentProfile.upsert({
-          where: { userId: studentId },
+          where: { userId: reg.studentId },
           update: profileData,
-          create: { userId: studentId, ...profileData },
+          create: { userId: reg.studentId, ...profileData },
         });
       }
 

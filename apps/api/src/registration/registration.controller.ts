@@ -69,9 +69,9 @@ export class RegistrationController {
   async saveDraft(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SaveDraftDto,
-    @CurrentUser('id') userId: string,
+    @CurrentUser() user: any,
   ) {
-    const registration = await this.registrationService.saveDraft(id, userId, dto);
+    const registration = await this.registrationService.saveDraft(id, user.id, dto, user.roles);
     return { success: true, data: registration };
   }
 

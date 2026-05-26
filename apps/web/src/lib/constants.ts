@@ -226,7 +226,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'System',
     items: [
       {
-        label: 'Roles & Permissions',
+        label: 'Roles & Features',
         href: '/dashboard/roles-responsibilities',
         icon: 'Shield',
         roles: ['SUPER_ADMIN'],
